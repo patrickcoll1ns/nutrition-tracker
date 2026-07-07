@@ -1,0 +1,1 @@
+dict = {"date": entry, "food": entry, }
