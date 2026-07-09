@@ -12,10 +12,40 @@ def main():
             entries.append(entry)
         except EOFError:
             break
-    print(entries)
+    print(f"Calories: {total_calories(entries)}")
+    print(f"Protein: {total_protein(entries)}")
+    print(f"Carbs: {total_carbs(entries)}")
+    print(f"Fat: {total_fat(entries)}")
+
 
 def make_entry(date, food, calories, protein, carbs, fat):
     return {"date": date, "food": food, "calories": calories, "protein": protein,
             "carbs": carbs, "fat": fat}
 
-main()
+def total_calories(entries):
+    total = 0
+    for entry in entries:
+        total += entry["calories"]
+    return total
+
+def total_protein(entries):
+    total = 0
+    for entry in entries:
+        total += entry["protein"]
+    return total
+
+def total_carbs(entries):
+    total = 0
+    for entry in entries:
+        total += entry["carbs"]
+    return total
+
+def total_fat(entries):
+    total = 0
+    for entry in entries:
+        total += entry["fat"]
+    return total
+
+
+if __name__ == "__main__":
+    main()
