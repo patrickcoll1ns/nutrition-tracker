@@ -14,10 +14,10 @@ def main():
             entries.append(entry)
         except EOFError:
             break
-    print(f"Calories: {total(entries, "calories")}")
-    print(f"Protein: {total(entries, "protein")}")
-    print(f"Carbs: {total(entries, "carbs")}")
-    print(f"Fat: {total(entries, "fat")}")
+    print(f"Calories: {total(entries, 'calories')}")
+    print(f"Protein: {total(entries, 'protein')}")
+    print(f"Carbs: {total(entries, 'carbs')}")
+    print(f"Fat: {total(entries, 'fat')}")
 
 def total(entries, macro):
     total = 0
