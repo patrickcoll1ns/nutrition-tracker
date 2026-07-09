@@ -1,3 +1,5 @@
+import json
+
 def main():
     entries = []
     date = input("What is the date today? ")
