@@ -1,7 +1,7 @@
 import json
 
 def main():
-    entries = []
+    entries = load("entries.txt")
     date = input("What is the date today? ")
     while True: 
         try: 
@@ -12,6 +12,7 @@ def main():
             fat = float(input("How many grams of fat did it have? "))
             entry = make_entry(date, food, calories, protein, carbs, fat)
             entries.append(entry)
+            save("entries.txt", entries)
         except EOFError:
             break
     print(f"Calories: {total(entries, 'calories')}")
