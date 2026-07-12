@@ -21,10 +21,10 @@ def main():
     print(f"Fat: {total(entries, 'fat')}")
 
 def total(entries, macro):
-    total = 0
+    total_macro = 0
     for entry in entries:
-        total += entry[macro]
-    return total
+        total_macro += entry[macro]
+    return total_macro
 
 def make_entry(date, food, calories, protein, carbs, fat):
     return {"date": date, "food": food, "calories": calories, "protein": protein,
