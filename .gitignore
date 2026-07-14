@@ -1,0 +1,15 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Test cache
+.pytest_cache/
+
+# Virtual environment
+.venv/
+
+# macOS
+.DS_Store
+
+# Local data
+entries.txt
