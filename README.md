@@ -1,6 +1,6 @@
 # Nutrition Tracker
 
-A command-line nutrition tracker that logs food entries and tallies calories, protein, carbs, and fat. Data persists to disk as JSON, so entries survive across restarts.
+A nutrition tracker that logs food entries and tallies calories, protein, carbs, and fat — available as a command-line tool and as a deployed Streamlit web app.
 
 ## Demo
 
