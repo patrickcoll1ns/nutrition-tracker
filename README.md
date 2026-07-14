@@ -4,9 +4,7 @@ A command-line nutrition tracker that logs food entries and tallies calories, pr
 
 ## Demo
 
-<!-- TODO: replace this with the live Streamlit URL once deployed. -->
-
-*Live version coming soon — deploying a web UI to Streamlit Community Cloud.*
+https://patrick-nutrition-tracker.streamlit.app/
 
 ## What it does
 
