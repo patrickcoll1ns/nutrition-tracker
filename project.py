@@ -42,6 +42,12 @@ def save(path, data):
     with open(path, "w") as file:
         json.dump(data, file)
 
+def entries_for(entries, date):
+    date_list = []
+    for entry in entries:
+        if entry["date"] == date:
+            date_list.append(entry)
+    return date_list
 
 
 if __name__ == "__main__":
