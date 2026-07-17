@@ -14,6 +14,7 @@ def main():
             entries.append(entry)
             save("entries.txt", entries)
         except EOFError:
+            print("\nFinished logging meals\n")
             break
     print(f"Calories: {total(entries, 'calories')}")
     print(f"Protein: {total(entries, 'protein')}")

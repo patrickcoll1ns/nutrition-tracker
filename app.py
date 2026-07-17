@@ -2,8 +2,8 @@ import streamlit as st
 from project import total, make_entry
 # No import of save and load because Entries are sessionscoped so they live in st.session_state and die with the browser session.
 
-st.title("nutrition tracker")
-st.write("Log foods")
+st.title("Nutrition Tracker")
+st.write("Log a food")
 
 if "entries" not in st.session_state:
     st.session_state["entries"] = []
