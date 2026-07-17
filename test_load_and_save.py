@@ -1,6 +1,6 @@
 from project import load, save
 
-entry = [{"date": "7/11/26", 
+entry = [{"date": "7/11/2026", 
                 "food": "chicken", 
                 "calories": 190, 
                 "protein": 30.0, 
