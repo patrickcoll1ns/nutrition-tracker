@@ -36,4 +36,4 @@ def test_does_not_mutate_original():
 
 def test_per_day_total():
     assert total(entries_for(entries, "7/11/2026"), "calories") == 280
-    assert total(entries_for(entries, "7/12/2026", "calories")) == 40
+    assert total(entries_for(entries, "7/12/2026"), "calories") == 40
