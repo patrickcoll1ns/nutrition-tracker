@@ -1,8 +1,9 @@
 import json
+from datetime import date
 
 def main():
     entries = load("entries.json")
-    date = input("What is the date today? ")
+    todays_date = date.today().isoformat()
     while True: 
         try: 
             food = input("What food did you eat? ")
@@ -10,16 +11,16 @@ def main():
             protein = float(input("How many grams of protein did it have? "))
             carbs = float(input("How many grams of carbs did it have? "))
             fat = float(input("How many grams of fat did it have? "))
-            entry = make_entry(date, food, calories, protein, carbs, fat)
+            entry = make_entry(todays_date, food, calories, protein, carbs, fat)
             entries.append(entry)
             save("entries.json", entries)
         except EOFError:
             print("\nFinished logging meals\n")
             break
-    print(f"Calories: {total(entries, 'calories')}")
-    print(f"Protein: {total(entries, 'protein')}")
-    print(f"Carbs: {total(entries, 'carbs')}")
-    print(f"Fat: {total(entries, 'fat')}")
+    print(f"Calories: {total(entries_for(entries, todays_date), 'calories')}")
+    print(f"Protein: {total(entries_for(entries, todays_date), 'protein')}")
+    print(f"Carbs: {total(entries_for(entries, todays_date), 'carbs')}")
+    print(f"Fat: {total(entries_for(entries, todays_date), 'fat')}")
 
 def total(entries, macro):
     total_macro = 0
