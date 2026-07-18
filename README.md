@@ -12,11 +12,11 @@ Add a few foods and watch the macro totals update live. The deployed app keeps d
 
 `make_entry()` and `total()` live in `project.py` and are shared by both frontends, so the logic exists in one place and the interfaces are just interfaces.
 
-**Web app (`app.py`)** — a form for date, food, and the four macros. Submitting adds the entry to the running log and updates the totals for calories, protein, carbs, and fat. Entries live in the browser session and are gone when the tab closes; nothing is written to disk.
+- Auto-stamps each entry with today's date, then repeatedly logs foods you ate along with their calories, protein, carbs, and fat.
+- Saves after every entry, so a crash mid-session won't lose your data.
+- Press `Ctrl-D` (EOF) to finish, at which point it prints **today's** total for each macro.
 
-**Command-line tool (`project.py`)** — prompts for a date, then loops: food, calories, protein, carbs, fat, repeat. Saves to `entries.json` after every entry, so a crash mid-session doesn't lose the log, and reloads it on the next run. Press `Ctrl-D` (EOF) to finish and print the totals.
-
-Note: entries store a date field, but totals currently sum *all* entries rather than filtering by day. Per-day filtering is planned (see Roadmap).
+Entries accumulate across days in `entries.json`; the end-of-session summary filters to the current day, so yesterday's food doesn't inflate today's numbers.
 
 ## Project structure
 
