@@ -9,7 +9,7 @@ if "entries" not in st.session_state:
     st.session_state["entries"] = []
 
 with st.form("entry_form", clear_on_submit=True):   
-    date = st.text_input("Date")
+    date = st.date_input("Date").isoformat()
     food = st.text_input("Food")
     calories = st.number_input("Calories", min_value=0, step=1)
     protein = st.number_input("Protein", min_value=0.0, step=0.1)
