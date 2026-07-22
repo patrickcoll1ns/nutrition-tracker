@@ -8,13 +8,14 @@ def main():
     todays_date = date.today().isoformat()
     while True: 
         try: 
-            food = input("What food did you eat? ")
-            calories = int(input("How many calories did it have? "))
-            protein = float(input("How many grams of protein did it have? "))
-            carbs = float(input("How many grams of carbs did it have? "))
-            fat = float(input("How many grams of fat did it have? "))
-            entry = make_entry(todays_date, food, calories, protein, carbs, fat)
-            entries.append(entry)
+            description = input("What did you eat today? Be as specific as possible. ")
+            parsed = parse_meal(description)
+            if not parsed:
+                print("Could not read that, try describing it differently.")
+                continue
+            for item in parsed:
+                entry = make_entry(todays_date, item["food"], item["calories"], item["protein"], item["carbs"], item["fat"])
+                entries.append(entry)
             save("entries.json", entries)
         except EOFError:
             print("\nFinished logging meals\n")
