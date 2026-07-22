@@ -38,7 +38,7 @@ def load(path):
     try:
         with open(path) as file:
             return json.load(file)
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError):
         return []
     
 def save(path, data):
