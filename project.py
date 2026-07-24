@@ -2,6 +2,7 @@ import json, os
 from datetime import date
 from dotenv import load_dotenv
 from google import genai
+import requests
 
 def main():
     entries = load("entries.json")
@@ -108,6 +109,15 @@ def parse_response(raw: str):
 
 def parse_meal(text: str):
     return parse_response(call_model(text))
+
+def call_usda(food_name: str):
+    load_dotenv()
+    api_key = os.environ["USDA_API_KEY"]
+    response = requests.get(
+        "https://api.nal.usda.gov/fdc/v1/foods/search",
+        params={"api_key": api_key, "query": food_name, "pageSize": 1},
+    )
+    return response.json()
 
 if __name__ == "__main__":
     main()
