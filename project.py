@@ -124,5 +124,33 @@ def call_usda(food_name: str):
     )
     return response.json()
 
+def parse_usda_response(data: dict):
+    foods = data.get("foods", [])
+    if not isinstance(foods, list):
+        return []
+
+    parsed = []
+    for food in foods:
+        nutrients = food.get("foodNutrients", [])
+        calories = next((n for n in nutrients
+                          if n.get("nutrientName") == "Energy" and n.get("unitName") == "KCAL"), None)
+        protein = next((n for n in nutrients if n.get("nutrientName") == "Protein"), None)
+        carbs = next((n for n in nutrients if n.get("nutrientName") == "Carbohydrate, by difference"), None)
+        fat = next((n for n in nutrients if n.get("nutrientName") == "Total lipid (fat)"), None)
+
+        if not all([calories, protein, carbs, fat]):
+            continue
+
+        parsed.append({
+            "fdc_id": food.get("fdcId"),
+            "description": food.get("description"),
+            "calories": calories["value"],
+            "protein": protein["value"],
+            "carbs": carbs["value"],
+            "fat": fat["value"],
+        })
+
+    return parsed
+
 if __name__ == "__main__":
     main()
