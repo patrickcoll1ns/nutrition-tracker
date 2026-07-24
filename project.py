@@ -56,14 +56,11 @@ def entries_for(entries, date):
 def call_model(text: str):
     load_dotenv()
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    prompt = f"""You extract nutrition data from food descriptions.
+    prompt = f"""You extract foods and portion sizes from food descriptions.
 
 Return a JSON array. Each element is one food, with these exact keys:
 - "food": the food name (string)
-- "calories": estimated calories (int)
-- "protein": estimated grams of protein (float)
-- "carbs": estimated grams of carbs (float)
-- "fat": estimated grams of fat (float)
+- "grams": estimated portion weight in grams (int)
 
 Rules:
 - Return ONLY the JSON array. No explanation, no markdown code fences.
@@ -73,8 +70,7 @@ Rules:
 
 Example:
 Input: "two eggs and a slice of toast"
-Output: [{{"food": "eggs", "calories": 140, "protein": 12.0, "carbs": 1.5, "fat": 10.3}}, 
-{{"food": "toast", "calories": 75, "protein": 3.0, "carbs": 13.5, "fat": 1.3}}]
+Output: [{{"food": "eggs", "grams": 100}}, {{"food": "toast", "grams": 30}}]
 
 Input: "{text}"
 Output:"""
