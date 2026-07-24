@@ -102,7 +102,7 @@ def parse_response(raw: str):
         return []
     
     # Keep only entries that are well-formed and drop the rest.
-    required = ("food", "calories", "protein", "carbs", "fat")
+    required = ("food", "grams")
     valid = []
     for item in data:
         if isinstance(item, dict) and all(key in item for key in required):

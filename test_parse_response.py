@@ -3,16 +3,13 @@ import pytest
 
 
 def test_single_food():
-    raw = '[{"food": "chicken", "calories": 190, "protein": 30.0, "carbs": 4.5, "fat": 0.3}]'
+    raw = '[{"food": "chicken", "grams": 150}]'
     result = parse_response(raw)
-    assert result == [
-        {"food": "chicken", "calories": 190, "protein": 30.0, "carbs": 4.5, "fat": 0.3}
-    ]
+    assert result == [{"food": "chicken", "grams": 150}]
 
 
 def test_multi_food():
-    raw = ('[{"food": "chicken", "calories": 190, "protein": 30.0, "carbs": 4.5, "fat": 0.3}, '
-           '{"food": "rice", "calories": 90, "protein": 4.0, "carbs": 40.0, "fat": 0.4}]')
+    raw = '[{"food": "chicken", "grams": 150}, {"food": "rice", "grams": 200}]'
     result = parse_response(raw)
     assert len(result) == 2
     assert result[0]["food"] == "chicken"
@@ -20,17 +17,14 @@ def test_multi_food():
 
 
 def test_strips_code_fences():
-    raw = '```json\n[{"food": "egg", "calories": 70, "protein": 6.0, "carbs": 0.5, "fat": 5.0}]\n```'
+    raw = '```json\n[{"food": "egg", "grams": 50}]\n```'
     result = parse_response(raw)
-    assert result == [
-        {"food": "egg", "calories": 70, "protein": 6.0, "carbs": 0.5, "fat": 5.0}
-    ]
+    assert result == [{"food": "egg", "grams": 50}]
 
 
 def test_drops_malformed_item():
-    # first item complete; second is missing every macro
-    raw = ('[{"food": "chicken", "calories": 190, "protein": 30.0, "carbs": 4.5, "fat": 0.3}, '
-           '{"food": "rice"}]')
+    # first item complete; second is missing grams entirely
+    raw = '[{"food": "chicken", "grams": 150}, {"food": "rice"}]'
     result = parse_response(raw)
     assert len(result) == 1
     assert result[0]["food"] == "chicken"

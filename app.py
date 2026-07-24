@@ -28,10 +28,10 @@ if st.button("Parse & log"):
         try:
             with st.spinner("Parsing..."):
                 parsed = parse_meal(description)
-        except Exception:
+        except Exception as e:
             # network/quota/key failure — friendly message, NOT a traceback
             parsed = None
-            st.error("Couldn't reach the model. Try again, or use the manual form below. {e}")
+            st.error(f"Couldn't reach the model. Try again, or use the manual form below. {e}")
 
         if parsed is None:
             pass # error already showed above
