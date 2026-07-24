@@ -115,7 +115,12 @@ def call_usda(food_name: str):
     api_key = os.environ["USDA_API_KEY"]
     response = requests.get(
         "https://api.nal.usda.gov/fdc/v1/foods/search",
-        params={"api_key": api_key, "query": food_name, "pageSize": 1},
+        params={
+            "api_key": api_key,
+            "query": food_name,
+            "pageSize": 1,
+            "dataType": ["Foundation", "SR Legacy", "Survey (FNDDS)"],
+        },
     )
     return response.json()
 
