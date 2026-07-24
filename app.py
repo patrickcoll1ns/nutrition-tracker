@@ -39,7 +39,8 @@ if st.button("Parse & log"):
             st.warning("I could not find any food in that description.")
         else:
             for item in parsed:
-                entry = make_entry(date, item["food"], item["calories"], item["protein"], item["carbs"], item["fat"])
+                entry = make_entry(date, item["food"], item["calories"], item["protein"], item["carbs"],
+                                    item["fat"], item["usda_id"], item["usda_description"])
                 st.session_state["entries"].append(entry)
             st.success(f"Logged {len(parsed)} item(s).")
         
@@ -57,7 +58,7 @@ if submitted:
     if not food.strip():
         st.error("Enter a food name before making an entry.")
     else:
-        entry = make_entry(date, food, calories, protein, carbs, fat)
+        entry = make_entry(date, food, calories, protein, carbs, fat, None, None)
         st.session_state["entries"].append(entry)
 
 total_calories = total(st.session_state["entries"], "calories")

@@ -15,7 +15,8 @@ def main():
                 print("Could not read that, try describing it differently.")
                 continue
             for item in parsed:
-                entry = make_entry(todays_date, item["food"], item["calories"], item["protein"], item["carbs"], item["fat"])
+                entry = make_entry(todays_date, item["food"], item["calories"], item["protein"], item["carbs"],
+                                    item["fat"], item["usda_id"], item["usda_description"])
                 entries.append(entry)
             save("entries.json", entries)
         except EOFError:
@@ -32,9 +33,9 @@ def total(entries, macro):
         total_macro += entry[macro]
     return total_macro
 
-def make_entry(date, food, calories, protein, carbs, fat):
+def make_entry(date, food, calories, protein, carbs, fat, usda_id, usda_description):
     return {"date": date, "food": food, "calories": calories, "protein": protein,
-            "carbs": carbs, "fat": fat}
+            "carbs": carbs, "fat": fat, "usda_id": usda_id, "usda_description": usda_description}
 
 def load(path):
     try:
@@ -108,7 +109,24 @@ def parse_response(raw: str):
     return valid
 
 def parse_meal(text: str):
-    return parse_response(call_model(text))
+    foods = parse_response(call_model(text))
+    meals = []
+    for item in foods:
+        candidates = parse_usda_response(call_usda(item["food"]))
+        match = select_best_match(candidates)
+        if match is None:
+            continue
+        macros = scale_macros(match, item["grams"])
+        meals.append({
+            "food": item["food"],
+            "calories": macros["calories"],
+            "protein": macros["protein"],
+            "carbs": macros["carbs"],
+            "fat": macros["fat"],
+            "usda_id": match["fdc_id"],
+            "usda_description": match["description"],
+        })
+    return meals
 
 def call_usda(food_name: str):
     load_dotenv()
