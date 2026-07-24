@@ -152,5 +152,19 @@ def parse_usda_response(data: dict):
 
     return parsed
 
+def select_best_match(foods):
+    if not foods:
+        return None
+    return foods[0]
+
+def scale_macros(macros_per_100g, grams):
+    factor = grams / 100
+    return {
+        "calories": macros_per_100g["calories"] * factor,
+        "protein": macros_per_100g["protein"] * factor,
+        "carbs": macros_per_100g["carbs"] * factor,
+        "fat": macros_per_100g["fat"] * factor,
+    }
+
 if __name__ == "__main__":
     main()
