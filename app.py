@@ -31,7 +31,7 @@ if st.button("Parse & log"):
         except Exception:
             # network/quota/key failure — friendly message, NOT a traceback
             parsed = None
-            st.error("Couldn't reach the model. Try again, or use the manual form below.")
+            st.error("Couldn't reach the model. Try again, or use the manual form below. {e}")
 
         if parsed is None:
             pass # error already showed above
