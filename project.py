@@ -29,8 +29,10 @@ def main():
                 print("Could not read that, try describing it differently.")
                 continue
             for item in parsed:
-                entry = make_entry(todays_date, item["food"], item["calories"], item["protein"], item["carbs"],
-                                    item["fat"], item["usda_id"], item["usda_description"], item["grams"])
+                entry = make_entry(todays_date, item["food"], calories=item["calories"],
+                                    protein=item["protein"], carbs=item["carbs"], fat=item["fat"],
+                                    usda_id=item["usda_id"], usda_description=item["usda_description"],
+                                    grams=item["grams"])
                 entries.append(entry)
             save("entries.json", entries)
             if unmatched:
@@ -53,7 +55,10 @@ def total(entries, macro):
         total_macro += entry[macro]
     return round(total_macro, 2)
 
-def make_entry(date, food, calories, protein, carbs, fat, usda_id, usda_description, grams):
+def make_entry(date, food, *, calories, protein, carbs, fat, usda_id, usda_description, grams):
+    # calories/protein/carbs/fat/usda_id/... are keyword-only on purpose:
+    # they're mostly same-typed (floats) and easy to transpose (e.g.
+    # carbs/fat) if passed positionally.
     return {"date": date, "food": food, "calories": calories, "protein": protein,
             "carbs": carbs, "fat": fat, "usda_id": usda_id,
             "usda_description": usda_description, "grams": grams}
