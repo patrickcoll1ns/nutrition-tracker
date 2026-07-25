@@ -73,17 +73,24 @@ Return a JSON array. Each element is one food, with these exact keys:
 - "usda_query": a short USDA-style search phrase for this food, carrying over
   any preparation, cut, or qualifier mentioned or implied (e.g. "chicken
   breast, grilled, skinless") (string)
-- "grams": estimated portion weight in grams (int)
+- "quantity": number of separate items (positive int)
+- "grams_per_item": estimated weight of one item in grams (positive number)
 
 Rules:
 - Return ONLY the JSON array. No explanation, no markdown code fences.
 - One object per distinct food. "chicken and rice" becomes two objects.
-- If no quantity is given, estimate for one standard serving.
+- Keep quantity separate from the food name.
+- Include preparation details such as raw, cooked, baked, or fried in
+  "usda_query".
+- If no quantity is given, use 1.
+- If no weight is given, estimate one standard item's weight.
+- For uncountable portions such as rice, use quantity 1 and put the
+  complete portion weight in grams_per_item.
 - If the input names no food, return an empty array: []
 
 Example:
 Input: "two eggs and a slice of toast"
-Output: [{{"food": "eggs", "usda_query": "egg, whole, raw", "grams": 100}}, {{"food": "toast", "usda_query": "bread, toasted", "grams": 30}}]
+Output: [{{"food": "egg", "usda_query": "egg, whole, cooked", "quantity": 2, "grams_per_item": 50}}, {{"food": "toast", "usda_query": "bread, toasted", "quantity": 1, "grams_per_item": 30}}]
 
 Input: "{text}"
 Output:"""
@@ -112,20 +119,47 @@ def parse_response(raw: str):
         return []
     
     # Keep only entries that are well-formed and drop the rest.
-    required = ("food", "grams")
+    required = ("food", "usda_query", "quantity", "grams_per_item")
     valid = []
     for item in data:
-        if isinstance(item, dict) and all(key in item for key in required):
-            valid.append(item)
+        if not isinstance(item, dict):
+            continue
+        if not all(key in item for key in required):
+            continue
+        if not isinstance(item["food"], str) or not item["food"].strip():
+            continue
+        if not isinstance(item["usda_query"], str) or not item["usda_query"].strip():
+            continue
+        if isinstance(item["quantity"], bool) or not isinstance(item["quantity"], int):
+            continue
+        if item["quantity"] <= 0:
+            continue
+        if isinstance(item["grams_per_item"], bool) or not isinstance(
+            item["grams_per_item"], (int, float)
+        ):
+            continue
+        if item["grams_per_item"] <= 0:
+            continue
+        valid.append(item)
         
     return valid
+
+def expand_food_item(item):
+    portions = []
+    for _ in range(item["quantity"]):
+        portions.append({
+            "food": item["food"],
+            "usda_query": item["usda_query"],
+            "grams": item["grams_per_item"],
+        })
+    return portions
 
 def parse_meal(text: str):
     foods = parse_response(call_model(text))
     meals = []
     for item in foods:
-        # Fall back to the plain food name if the model ever omits usda_query.
-        query = item.get("usda_query") or item["food"]
+        portions = expand_food_item(item)
+        query = item["usda_query"]
         candidates = parse_usda_response(call_usda(query))
         try:
             match = select_best_match_llm(candidates, item["food"])
@@ -135,17 +169,18 @@ def parse_meal(text: str):
             match = select_best_match(candidates, query)
         if match is None:
             continue
-        macros = scale_macros(match, item["grams"])
-        meals.append({
-            "food": item["food"],
-            "grams": item["grams"],
-            "calories": macros["calories"],
-            "protein": macros["protein"],
-            "carbs": macros["carbs"],
-            "fat": macros["fat"],
-            "usda_id": match["fdc_id"],
-            "usda_description": match["description"],
-        })
+        for portion in portions:
+            macros = scale_macros(match, portion["grams"])
+            meals.append({
+                "food": portion["food"],
+                "grams": portion["grams"],
+                "calories": macros["calories"],
+                "protein": macros["protein"],
+                "carbs": macros["carbs"],
+                "fat": macros["fat"],
+                "usda_id": match["fdc_id"],
+                "usda_description": match["description"],
+            })
     return meals
 
 def call_usda(food_name: str):
