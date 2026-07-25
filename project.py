@@ -4,11 +4,19 @@ from dotenv import load_dotenv
 import anthropic
 import requests
 
+
+class MealLookupError(Exception):
+    """Raised when Claude or USDA can't be reached. Message is safe to show
+    to end users — it never includes raw exception text, which for USDA
+    errors would otherwise leak the API key (it rides along in the request
+    URL that requests.exceptions.* embeds in its message)."""
+
+
 def main():
     entries = load("entries.json")
     todays_date = date.today().isoformat()
-    while True: 
-        try: 
+    while True:
+        try:
             description = input("What did you eat today? Be as specific as possible. ")
             parsed = parse_meal(description)
             if not parsed:
@@ -22,6 +30,10 @@ def main():
         except EOFError:
             print("\nFinished logging meals\n")
             break
+        except MealLookupError as e:
+            print(f"\n{e}\n")
+        except Exception:
+            print("\nSomething went wrong parsing that meal. Please try again.\n")
     print(f"Calories: {total(entries_for(entries, todays_date), 'calories')}")
     print(f"Protein: {total(entries_for(entries, todays_date), 'protein')}")
     print(f"Carbs: {total(entries_for(entries, todays_date), 'carbs')}")
@@ -95,12 +107,19 @@ Output: [{{"food": "egg", "usda_query": "egg, whole, cooked", "quantity": 2, "gr
 Input: "{text}"
 Output:"""
 
-    response = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return next(block.text for block in response.content if block.type == "text")
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except anthropic.AnthropicError as e:
+        raise MealLookupError("Could not reach the meal-parsing model. Please try again.") from e
+
+    try:
+        return next(block.text for block in response.content if block.type == "text")
+    except StopIteration as e:
+        raise MealLookupError("The model returned an unexpected response. Please try again.") from e
 
 def parse_response(raw: str):
     cleaned = raw.strip()
@@ -188,17 +207,23 @@ def parse_meal(text: str):
 def call_usda(food_name: str):
     load_dotenv()
     api_key = os.environ["USDA_API_KEY"]
-    response = requests.post(
-        "https://api.nal.usda.gov/fdc/v1/foods/search",
-        params={"api_key": api_key},
-        json={
-            "query": food_name,
-            "pageSize": 10,
-            "dataType": ["Foundation", "SR Legacy", "Survey (FNDDS)"],
-        },
-        timeout=10,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            "https://api.nal.usda.gov/fdc/v1/foods/search",
+            params={"api_key": api_key},
+            json={
+                "query": food_name,
+                "pageSize": 10,
+                "dataType": ["Foundation", "SR Legacy", "Survey (FNDDS)"],
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        # Not `raise ... from e` displayed anywhere user-facing: requests
+        # embeds the full request URL (including ?api_key=...) in these
+        # exceptions' messages, so we deliberately don't pass str(e) along.
+        raise MealLookupError("Could not reach the USDA food database. Please try again.") from e
     return response.json()
 
 def parse_usda_response(data: dict):

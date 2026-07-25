@@ -1,6 +1,7 @@
 import os
+import traceback
 import streamlit as st
-from project import total, make_entry, parse_meal
+from project import total, make_entry, parse_meal, MealLookupError
 # No import of save and load because Entries are sessionscoped so they live in st.session_state and die with the browser session.
 
 # Bridge Streamlit Cloud's secrets into the environment so project.py
@@ -26,13 +27,19 @@ if st.button("Parse & log"):
     if not description.strip():
         st.error("Type a meal description first.")
     else: 
+        parsed = None
         try:
             with st.spinner("Parsing..."):
                 parsed = parse_meal(description)
-        except Exception as e:
-            # network/quota/key failure — friendly message, NOT a traceback
-            parsed = None
-            st.error(f"Couldn't reach the model. Try again, or use the manual form below. {e}")
+        except MealLookupError as e:
+            # Message is pre-sanitized in project.py — safe to show as-is,
+            # and it correctly identifies which service (Claude vs USDA) failed.
+            st.error(str(e))
+        except Exception:
+            # Anything else is an unexpected bug, not a network/API issue.
+            # Don't show the raw exception text to end users; log it instead.
+            st.error("Something went wrong parsing that meal. Try again, or use the manual form below.")
+            traceback.print_exc()
 
         if parsed is None:
             pass # error already showed above
