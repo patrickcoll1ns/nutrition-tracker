@@ -7,6 +7,7 @@ from project import total, make_entry, parse_meal
 # can stay streamlit-free and keep reading os.environ.
 try:
     os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+    os.environ["USDA_API_KEY"] = st.secrets["USDA_API_KEY"]
 except Exception:
     pass
 
