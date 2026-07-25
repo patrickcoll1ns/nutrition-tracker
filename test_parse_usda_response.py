@@ -37,6 +37,34 @@ def test_drops_food_missing_a_nutrient():
     assert parse_usda_response(data) == []
 
 
+def test_drops_food_with_missing_nutrient_value():
+    data = {"foods": [{
+        "fdcId": 3,
+        "description": "malformed record",
+        "foodNutrients": [
+            {"nutrientName": "Energy", "unitName": "KCAL"},  # value key absent
+            {"nutrientName": "Protein", "unitName": "G", "value": 1},
+            {"nutrientName": "Carbohydrate, by difference", "unitName": "G", "value": 1},
+            {"nutrientName": "Total lipid (fat)", "unitName": "G", "value": 1},
+        ],
+    }]}
+    assert parse_usda_response(data) == []
+
+
+def test_drops_food_with_non_numeric_nutrient_value():
+    data = {"foods": [{
+        "fdcId": 4,
+        "description": "malformed record",
+        "foodNutrients": [
+            {"nutrientName": "Energy", "unitName": "KCAL", "value": "N/A"},
+            {"nutrientName": "Protein", "unitName": "G", "value": 1},
+            {"nutrientName": "Carbohydrate, by difference", "unitName": "G", "value": 1},
+            {"nutrientName": "Total lipid (fat)", "unitName": "G", "value": 1},
+        ],
+    }]}
+    assert parse_usda_response(data) == []
+
+
 def test_does_not_confuse_kj_energy_with_kcal():
     data = {"foods": [{
         "fdcId": 2,

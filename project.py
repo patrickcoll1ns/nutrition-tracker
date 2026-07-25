@@ -244,7 +244,10 @@ def parse_usda_response(data: dict):
         carbs = next((n for n in nutrients if n.get("nutrientName") == "Carbohydrate, by difference"), None)
         fat = next((n for n in nutrients if n.get("nutrientName") == "Total lipid (fat)"), None)
 
-        if not all([calories, protein, carbs, fat]):
+        required_nutrients = (calories, protein, carbs, fat)
+        if not all(required_nutrients):
+            continue
+        if not all(isinstance(n.get("value"), (int, float)) for n in required_nutrients):
             continue
 
         parsed.append({
