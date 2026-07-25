@@ -1,20 +1,27 @@
 # Nutrition Tracker
 
-A Python nutrition tracker that logs food entries and tallies calories, protein, carbs, and fat. One core module backs two frontends: a command-line tool and a deployed Streamlit web app.
+A Python nutrition tracker that parses free-text meal descriptions ("two eggs and a slice of toast") into calories, protein, carbs, and fat using Claude for extraction and the USDA FoodData Central API for nutrition data. One core module backs two frontends: a command-line tool and a deployed Streamlit web app.
 
 ## Demo
 
 https://patrick-nutrition-tracker.streamlit.app/
 
-Add a few foods and watch the macro totals update live. The deployed app keeps data only for your current browser session — see Design decisions for why.
+Describe a meal in plain English and watch the macro totals update live. The deployed app keeps data only for your current browser session — see Design decisions for why.
 
 ## What it does
 
-`make_entry()` and `total()` live in `project.py` and are shared by both frontends, so the logic exists in one place and the interfaces are just interfaces.
+`parse_meal()` in `project.py` is the shared pipeline behind both frontends:
 
-- Auto-stamps each entry with today's date, then repeatedly logs foods you ate along with their calories, protein, carbs, and fat.
-- Saves after every entry, so a crash mid-session won't lose your data.
-- Press `Ctrl-D` (EOF) to finish, at which point it prints **today's** total for each macro.
+1. Claude (`call_model`) extracts each distinct food, an estimated quantity, and a USDA-style search phrase from the description.
+2. Each food is looked up against USDA FoodData Central (`call_usda`).
+3. Claude re-ranks the USDA candidates against the original description (`select_best_match_llm`), falling back to a deterministic keyword-overlap heuristic (`select_best_match`) if the re-rank call fails or is inconclusive.
+4. The matched USDA record's per-100g macros are scaled to the estimated portion size (`scale_macros`).
+
+Foods that can't be matched to anything in USDA are reported back rather than silently dropped, so a partial parse doesn't quietly under-count your totals.
+
+- Auto-stamps each entry with today's date, then repeatedly logs foods you ate.
+- The CLI saves after every entry, so a crash mid-session won't lose your data.
+- Press `Ctrl-D` (EOF) to finish the CLI, at which point it prints **today's** total for each macro.
 
 Entries accumulate across days in `entries.json`; the end-of-session summary filters to the current day, so yesterday's food doesn't inflate today's numbers.
 
@@ -23,9 +30,9 @@ Entries accumulate across days in `entries.json`; the end-of-session summary fil
 ```
 nutrition-tracker/
 ├── app.py                  # Streamlit web frontend
-├── project.py              # CLI frontend + shared core logic
-├── test_total.py           # Tests for total()
-├── test_load_and_save.py   # Tests for JSON persistence
+├── project.py              # CLI frontend + shared core logic (Claude + USDA pipeline)
+├── test_*.py               # One test file per unit under test (see below)
+├── usda_egg_response.json  # Fixture: a real USDA API response, used by test_parse_usda_response.py
 ├── requirements.txt
 └── README.md
 ```
@@ -42,6 +49,13 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+You'll also need API keys for [Anthropic](https://console.anthropic.com/) and [USDA FoodData Central](https://fdc.nal.usda.gov/api-key-signup.html). Put them in a `.env` file in the project root (gitignored, never committed):
+
+```
+ANTHROPIC_API_KEY=your-key-here
+USDA_API_KEY=your-key-here
+```
+
 Then either:
 
 ```bash
@@ -49,7 +63,7 @@ streamlit run app.py    # web app, opens in your browser
 python project.py       # command-line tool
 ```
 
-Built and deployed on Python 3.13. The core logic depends only on the Python standard library — Streamlit is used for the web frontend, pytest for the tests.
+Built and deployed on Python 3.13, using `anthropic`, `requests`, `python-dotenv`, and `streamlit` for the web frontend.
 
 ## Design decisions
 
@@ -59,6 +73,8 @@ Built and deployed on Python 3.13. The core logic depends only on the Python sta
 - **JSON for persistence, not CSV.** The data is already a list of dicts, and JSON preserves types — an int stays an int and a float stays a float on the round-trip, with no manual parsing. SQLite is a planned upgrade once the data outgrows a flat file.
 - **Save after each entry, not once at the end.** A deliberate crash-safety tradeoff: writing more often costs a little I/O but means a crash mid-session doesn't wipe the log.
 - **One parameterized `total(entries, macro)` function.** Replaced four near-identical functions (one per macro) with a single function that takes the macro name as an argument. Less duplication, easier to extend.
+- **Claude/USDA failures never reach the user as a raw traceback.** Both API-calling functions wrap their exceptions in a single `MealLookupError` with a message that's safe to display — in particular, it never echoes the raw `requests` exception, since that embeds the full request URL (including the USDA API key querystring) in its message.
+- **Sane upper bounds on quantity, portion size, and foods-per-meal.** The Streamlit demo runs on a metered, shared API key; the extraction step is capped so a joke or adversarial description can't multiply into an unbounded number of USDA/Claude calls or an oversized in-memory list.
 
 ## Tests
 
@@ -66,15 +82,10 @@ Built and deployed on Python 3.13. The core logic depends only on the Python sta
 pytest
 ```
 
-The suite verifies:
+51 tests across the pure functions in `project.py`: JSON persistence, response parsing/validation (including malformed and boundary-value LLM output), USDA response parsing (including malformed/incomplete nutrient data), the heuristic match fallback, macro scaling, and per-day totals.
 
-- `total()` across all four macros
-- `total()` on an empty log
-- `total()` raising `KeyError` on an unknown macro
-- `save()` / `load()` round-trip persistence
-- `load()` returning an empty list when the file doesn't exist
+`call_model`, `call_usda`, and `parse_meal` — the functions that actually touch the network — are covered by mocking the Claude/USDA calls rather than hitting the real APIs, so failure paths (timeouts, HTTP errors, unmatched foods) are exercised without needing live credentials in CI.
 
 ## Roadmap
 
-- **Per-day totals** — entries already carry a date; totals should filter by it.
-- **Natural-language food logging** — parse free-text entries ("2 eggs and toast") into macros.
+- **Persistent accounts** — entries currently live in a flat file (CLI) or browser session (web); a real multi-user deployment needs accounts and a hosted database.
