@@ -131,15 +131,17 @@ def parse_meal(text: str):
 def call_usda(food_name: str):
     load_dotenv()
     api_key = os.environ["USDA_API_KEY"]
-    response = requests.get(
+    response = requests.post(
         "https://api.nal.usda.gov/fdc/v1/foods/search",
-        params={
-            "api_key": api_key,
+        params={"api_key": api_key},
+        json={
             "query": food_name,
             "pageSize": 1,
             "dataType": ["Foundation", "SR Legacy", "Survey (FNDDS)"],
         },
+        timeout=10,
     )
+    response.raise_for_status()
     return response.json()
 
 def parse_usda_response(data: dict):
