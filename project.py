@@ -16,7 +16,7 @@ def main():
                 continue
             for item in parsed:
                 entry = make_entry(todays_date, item["food"], item["calories"], item["protein"], item["carbs"],
-                                    item["fat"], item["usda_id"], item["usda_description"])
+                                    item["fat"], item["usda_id"], item["usda_description"], item["grams"])
                 entries.append(entry)
             save("entries.json", entries)
         except EOFError:
@@ -33,9 +33,10 @@ def total(entries, macro):
         total_macro += entry[macro]
     return total_macro
 
-def make_entry(date, food, calories, protein, carbs, fat, usda_id, usda_description):
+def make_entry(date, food, calories, protein, carbs, fat, usda_id, usda_description, grams):
     return {"date": date, "food": food, "calories": calories, "protein": protein,
-            "carbs": carbs, "fat": fat, "usda_id": usda_id, "usda_description": usda_description}
+            "carbs": carbs, "fat": fat, "usda_id": usda_id,
+            "usda_description": usda_description, "grams": grams}
 
 def load(path):
     try:
@@ -119,6 +120,7 @@ def parse_meal(text: str):
         macros = scale_macros(match, item["grams"])
         meals.append({
             "food": item["food"],
+            "grams": item["grams"],
             "calories": macros["calories"],
             "protein": macros["protein"],
             "carbs": macros["carbs"],
