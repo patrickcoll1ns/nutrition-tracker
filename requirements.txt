@@ -1,5 +1,5 @@
 streamlit
 pytest
 python-dotenv
-google-genai
+anthropic
 requests

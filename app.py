@@ -6,7 +6,7 @@ from project import total, make_entry, parse_meal
 # Bridge Streamlit Cloud's secrets into the environment so project.py
 # can stay streamlit-free and keep reading os.environ.
 try:
-    os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+    os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
     os.environ["USDA_API_KEY"] = st.secrets["USDA_API_KEY"]
 except Exception:
     pass

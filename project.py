@@ -1,7 +1,7 @@
 import json, os
 from datetime import date
 from dotenv import load_dotenv
-from google import genai
+import anthropic
 import requests
 
 def main():
@@ -56,13 +56,23 @@ def entries_for(entries, date):
             date_list.append(entry)
     return date_list
 
-def call_model(text: str):
+def get_client():
+    # Shared by call_model (extraction) and select_best_match_llm (reranking).
     load_dotenv()
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+def call_model(text: str):
+    client = get_client()
+    # usda_query carries prep/cut qualifiers (e.g. "grilled", "skinless") that
+    # "food" alone would drop, so call_usda and select_best_match_llm can
+    # still match on them even if they're phrased naturally in the input.
     prompt = f"""You extract foods and portion sizes from food descriptions.
 
 Return a JSON array. Each element is one food, with these exact keys:
-- "food": the food name (string)
+- "food": the food name as the user described it (string)
+- "usda_query": a short USDA-style search phrase for this food, carrying over
+  any preparation, cut, or qualifier mentioned or implied (e.g. "chicken
+  breast, grilled, skinless") (string)
 - "grams": estimated portion weight in grams (int)
 
 Rules:
@@ -73,16 +83,17 @@ Rules:
 
 Example:
 Input: "two eggs and a slice of toast"
-Output: [{{"food": "eggs", "grams": 100}}, {{"food": "toast", "grams": 30}}]
+Output: [{{"food": "eggs", "usda_query": "egg, whole, raw", "grams": 100}}, {{"food": "toast", "usda_query": "bread, toasted", "grams": 30}}]
 
 Input: "{text}"
 Output:"""
-    
-    response = client.models.generate_content(
-        model="gemini-3.5-flash",
-        contents=prompt
+
+    response = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
     )
-    return response.text
+    return next(block.text for block in response.content if block.type == "text")
 
 def parse_response(raw: str):
     cleaned = raw.strip()
@@ -113,8 +124,15 @@ def parse_meal(text: str):
     foods = parse_response(call_model(text))
     meals = []
     for item in foods:
-        candidates = parse_usda_response(call_usda(item["food"]))
-        match = select_best_match(candidates)
+        # Fall back to the plain food name if the model ever omits usda_query.
+        query = item.get("usda_query") or item["food"]
+        candidates = parse_usda_response(call_usda(query))
+        try:
+            match = select_best_match_llm(candidates, item["food"])
+        except Exception:
+            # LLM reranking is a nice-to-have; fall back to the word-overlap
+            # heuristic rather than dropping the food on a network/API hiccup.
+            match = select_best_match(candidates, query)
         if match is None:
             continue
         macros = scale_macros(match, item["grams"])
@@ -138,7 +156,7 @@ def call_usda(food_name: str):
         params={"api_key": api_key},
         json={
             "query": food_name,
-            "pageSize": 1,
+            "pageSize": 10,
             "dataType": ["Foundation", "SR Legacy", "Survey (FNDDS)"],
         },
         timeout=10,
@@ -174,10 +192,66 @@ def parse_usda_response(data: dict):
 
     return parsed
 
-def select_best_match(foods):
+def select_best_match_llm(foods, query):
     if not foods:
         return None
-    return foods[0]
+    if len(foods) == 1:
+        return foods[0]  # nothing to rank, skip the model call
+
+    # Candidates are indexed rather than passed by fdc_id so the model can
+    # just answer with a small integer instead of copying an id string.
+    listing = "\n".join(
+        f"{i}: {food['description']}" for i, food in enumerate(foods)
+    )
+    prompt = f"""You match a food description to the closest USDA database entry.
+
+Food described by the user: "{query}"
+
+Candidate USDA entries:
+{listing}
+
+Return ONLY the number of the single best-matching entry, with no other
+text. If none of them reasonably match the described food, return -1.
+"""
+
+    client = get_client()
+    response = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=16,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = next(block.text for block in response.content if block.type == "text")
+    index = int(text.strip())  # raises ValueError on a garbled reply
+
+    if index < 0 or index >= len(foods):
+        return None  # model said -1 (no good match) or gave a bogus index
+    return foods[index]
+
+def select_best_match(foods, query):
+    if not foods:
+        return None
+
+    preparation_words = {
+        "raw", "baked", "fried", "cooked", "boiled", "grilled",
+        "roasted", "dried", "dehydrated", "powder", "chips",
+    }
+    query_words = set(query.lower().replace(",", "").split())
+    query_has_preparation = bool(query_words & preparation_words)
+
+    def score(food):
+        description_words = set(
+            food["description"].lower().replace(",", "").split()
+        )
+        matching_words = len(query_words & description_words)
+        raw_bonus = (
+            1
+            if not query_has_preparation and "raw" in description_words
+            else 0
+        )
+        extra_words = len(description_words - query_words)
+        return matching_words, raw_bonus, -extra_words
+
+    return max(foods, key=score)
 
 def scale_macros(macros_per_100g, grams):
     factor = grams / 100
