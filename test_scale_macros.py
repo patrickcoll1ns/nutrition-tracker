@@ -21,3 +21,14 @@ def test_ignores_extra_keys():
     match = {**per_100g, "fdc_id": 747997, "description": "Eggs, Grade A, Large, egg white"}
     result = scale_macros(match, 100)
     assert result == per_100g
+
+
+def test_rounds_to_two_decimal_places():
+    result = scale_macros(per_100g, 33)
+
+    assert result == {
+        "calories": 18.15,
+        "protein": 3.53,
+        "carbs": 0.78,
+        "fat": 0.0,
+    }

@@ -41,3 +41,8 @@ def test_emptyList():
 def test_nonMacro():
     with pytest.raises(KeyError):
         total(entries, 'sodium')
+
+
+def test_rounds_float_total():
+    entries = [{"fat": 0.1}, {"fat": 0.2}]
+    assert total(entries, "fat") == 0.3

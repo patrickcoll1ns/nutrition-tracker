@@ -31,7 +31,7 @@ def total(entries, macro):
     total_macro = 0
     for entry in entries:
         total_macro += entry[macro]
-    return total_macro
+    return round(total_macro, 2)
 
 def make_entry(date, food, calories, protein, carbs, fat, usda_id, usda_description, grams):
     return {"date": date, "food": food, "calories": calories, "protein": protein,
@@ -162,10 +162,12 @@ def parse_meal(text: str):
         query = item["usda_query"]
         candidates = parse_usda_response(call_usda(query))
         try:
-            match = select_best_match_llm(candidates, item["food"])
+            match = select_best_match_llm(candidates, query)
         except Exception:
-            # LLM reranking is a nice-to-have; fall back to the word-overlap
-            # heuristic rather than dropping the food on a network/API hiccup.
+            # LLM reranking is a nice-to-have. A network/API failure should
+            # not prevent the deterministic heuristic from trying.
+            match = None
+        if match is None:
             match = select_best_match(candidates, query)
         if match is None:
             continue
@@ -291,10 +293,10 @@ def select_best_match(foods, query):
 def scale_macros(macros_per_100g, grams):
     factor = grams / 100
     return {
-        "calories": macros_per_100g["calories"] * factor,
-        "protein": macros_per_100g["protein"] * factor,
-        "carbs": macros_per_100g["carbs"] * factor,
-        "fat": macros_per_100g["fat"] * factor,
+        "calories": round(macros_per_100g["calories"] * factor, 2),
+        "protein": round(macros_per_100g["protein"] * factor, 2),
+        "carbs": round(macros_per_100g["carbs"] * factor, 2),
+        "fat": round(macros_per_100g["fat"] * factor, 2),
     }
 
 if __name__ == "__main__":
