@@ -27,10 +27,10 @@ if st.button("Parse & log"):
     if not description.strip():
         st.error("Type a meal description first.")
     else: 
-        parsed = None
+        parsed, unmatched = None, []
         try:
             with st.spinner("Parsing..."):
-                parsed = parse_meal(description)
+                parsed, unmatched = parse_meal(description)
         except MealLookupError as e:
             # Message is pre-sanitized in project.py — safe to show as-is,
             # and it correctly identifies which service (Claude vs USDA) failed.
@@ -43,14 +43,17 @@ if st.button("Parse & log"):
 
         if parsed is None:
             pass # error already showed above
-        elif not parsed:
+        elif not parsed and not unmatched:
             st.warning("I could not find any food in that description.")
         else:
             for item in parsed:
                 entry = make_entry(date, item["food"], item["calories"], item["protein"], item["carbs"],
                                     item["fat"], item["usda_id"], item["usda_description"], item["grams"])
                 st.session_state["entries"].append(entry)
-            st.success(f"Logged {len(parsed)} item(s).")
+            if parsed:
+                st.success(f"Logged {len(parsed)} item(s).")
+            if unmatched:
+                st.warning(f"Couldn't find a USDA match for: {', '.join(unmatched)} — not logged.")
         
 st.subheader("Or enter it manually")
 

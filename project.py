@@ -18,8 +18,8 @@ def main():
     while True:
         try:
             description = input("What did you eat today? Be as specific as possible. ")
-            parsed = parse_meal(description)
-            if not parsed:
+            parsed, unmatched = parse_meal(description)
+            if not parsed and not unmatched:
                 print("Could not read that, try describing it differently.")
                 continue
             for item in parsed:
@@ -27,6 +27,8 @@ def main():
                                     item["fat"], item["usda_id"], item["usda_description"], item["grams"])
                 entries.append(entry)
             save("entries.json", entries)
+            if unmatched:
+                print(f"Couldn't find a USDA match for: {', '.join(unmatched)} — not logged.")
         except EOFError:
             print("\nFinished logging meals\n")
             break
@@ -176,6 +178,7 @@ def expand_food_item(item):
 def parse_meal(text: str):
     foods = parse_response(call_model(text))
     meals = []
+    unmatched = []
     for item in foods:
         portions = expand_food_item(item)
         query = item["usda_query"]
@@ -189,6 +192,7 @@ def parse_meal(text: str):
         if match is None:
             match = select_best_match(candidates, query)
         if match is None:
+            unmatched.append(item["food"])
             continue
         for portion in portions:
             macros = scale_macros(match, portion["grams"])
@@ -202,7 +206,7 @@ def parse_meal(text: str):
                 "usda_id": match["fdc_id"],
                 "usda_description": match["description"],
             })
-    return meals
+    return meals, unmatched
 
 def call_usda(food_name: str):
     load_dotenv()
