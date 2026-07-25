@@ -1,6 +1,6 @@
 import json
 
-from project import parse_response
+from project import parse_response, MAX_FOODS_PER_MEAL, MAX_QUANTITY_PER_ITEM, MAX_GRAMS_PER_ITEM
 import pytest
 
 
@@ -123,3 +123,36 @@ def test_bad_input_returns_empty(raw):
 ])
 def test_drops_invalid_values(item):
     assert parse_response(json.dumps([item])) == []
+
+
+def test_drops_quantity_above_max():
+    raw = json.dumps([{
+        "food": "grape", "usda_query": "grape, raw",
+        "quantity": MAX_QUANTITY_PER_ITEM + 1, "grams_per_item": 5,
+    }])
+    assert parse_response(raw) == []
+
+
+def test_allows_quantity_at_max():
+    raw = json.dumps([{
+        "food": "grape", "usda_query": "grape, raw",
+        "quantity": MAX_QUANTITY_PER_ITEM, "grams_per_item": 5,
+    }])
+    assert len(parse_response(raw)) == 1
+
+
+def test_drops_grams_per_item_above_max():
+    raw = json.dumps([{
+        "food": "watermelon", "usda_query": "watermelon, raw",
+        "quantity": 1, "grams_per_item": MAX_GRAMS_PER_ITEM + 1,
+    }])
+    assert parse_response(raw) == []
+
+
+def test_truncates_to_max_foods_per_meal():
+    items = [
+        {"food": f"food{i}", "usda_query": f"food{i}", "quantity": 1, "grams_per_item": 100}
+        for i in range(MAX_FOODS_PER_MEAL + 10)
+    ]
+    result = parse_response(json.dumps(items))
+    assert len(result) == MAX_FOODS_PER_MEAL

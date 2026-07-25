@@ -21,7 +21,7 @@ if "entries" not in st.session_state:
 date = st.date_input("Date").isoformat()
 
 st.subheader("Describe your meal")
-description = st.text_input("What did you eat? ")
+description = st.text_input("What did you eat? ", max_chars=300)
 
 if st.button("Parse & log"):
     if not description.strip():

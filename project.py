@@ -4,6 +4,12 @@ from dotenv import load_dotenv
 import anthropic
 import requests
 
+# Sane upper bounds so a joke/adversarial description ("a hundred thousand
+# grapes") can't blow up memory or rack up API calls on a shared demo.
+MAX_FOODS_PER_MEAL = 20
+MAX_QUANTITY_PER_ITEM = 50
+MAX_GRAMS_PER_ITEM = 5000
+
 
 class MealLookupError(Exception):
     """Raised when Claude or USDA can't be reached. Message is safe to show
@@ -114,6 +120,7 @@ Output:"""
             model="claude-haiku-4-5",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
+            timeout=30,
         )
     except anthropic.AnthropicError as e:
         raise MealLookupError("Could not reach the meal-parsing model. Please try again.") from e
@@ -153,17 +160,17 @@ def parse_response(raw: str):
             continue
         if isinstance(item["quantity"], bool) or not isinstance(item["quantity"], int):
             continue
-        if item["quantity"] <= 0:
+        if not (0 < item["quantity"] <= MAX_QUANTITY_PER_ITEM):
             continue
         if isinstance(item["grams_per_item"], bool) or not isinstance(
             item["grams_per_item"], (int, float)
         ):
             continue
-        if item["grams_per_item"] <= 0:
+        if not (0 < item["grams_per_item"] <= MAX_GRAMS_PER_ITEM):
             continue
         valid.append(item)
-        
-    return valid
+
+    return valid[:MAX_FOODS_PER_MEAL]
 
 def expand_food_item(item):
     portions = []
@@ -185,9 +192,11 @@ def parse_meal(text: str):
         candidates = parse_usda_response(call_usda(query))
         try:
             match = select_best_match_llm(candidates, query)
-        except Exception:
+        except Exception as e:
             # LLM reranking is a nice-to-have. A network/API failure should
-            # not prevent the deterministic heuristic from trying.
+            # not prevent the deterministic heuristic from trying — but log
+            # it so a persistently broken reranker doesn't go unnoticed.
+            print(f"select_best_match_llm failed for {query!r}: {e!r}")
             match = None
         if match is None:
             match = select_best_match(candidates, query)
@@ -288,6 +297,7 @@ text. If none of them reasonably match the described food, return -1.
         model="claude-haiku-4-5",
         max_tokens=16,
         messages=[{"role": "user", "content": prompt}],
+        timeout=30,
     )
     text = next(block.text for block in response.content if block.type == "text")
     index = int(text.strip())  # raises ValueError on a garbled reply
