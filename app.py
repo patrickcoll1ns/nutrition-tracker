@@ -2,7 +2,7 @@ import os
 import traceback
 import streamlit as st
 from project import total, make_entry, parse_meal, MealLookupError
-# No import of save and load because Entries are sessionscoped so they live in st.session_state and die with the browser session.
+import db
 
 # Bridge Streamlit Cloud's secrets into the environment so project.py
 # can stay streamlit-free and keep reading os.environ.
@@ -14,8 +14,7 @@ except Exception:
 
 st.title("Nutrition Tracker")
 
-if "entries" not in st.session_state:
-    st.session_state["entries"] = []
+db.init_db()
 
 # Shared by both logging paths, so it has to live above both of them.
 date = st.date_input("Date").isoformat()
@@ -50,7 +49,7 @@ if st.button("Parse & log"):
                 entry = make_entry(date, item["food"], calories=item["calories"], protein=item["protein"],
                                     carbs=item["carbs"], fat=item["fat"], usda_id=item["usda_id"],
                                     usda_description=item["usda_description"], grams=item["grams"])
-                st.session_state["entries"].append(entry)
+                db.save_entry(entry)
             if parsed:
                 st.success(f"Logged {len(parsed)} item(s).")
             if unmatched:
@@ -72,16 +71,17 @@ if submitted:
     else:
         entry = make_entry(date, food, calories=calories, protein=protein, carbs=carbs, fat=fat,
                             usda_id=None, usda_description=None, grams=None)
-        st.session_state["entries"].append(entry)
+        db.save_entry(entry)
 
-total_calories = total(st.session_state["entries"], "calories")
-total_protein = total(st.session_state["entries"], "protein")
-total_carbs = total(st.session_state["entries"], "carbs")
-total_fat = total(st.session_state["entries"], "fat")
+entries = db.entries_for(date)
+total_calories = total(entries, "calories")
+total_protein = total(entries, "protein")
+total_carbs = total(entries, "carbs")
+total_fat = total(entries, "fat")
 
 st.metric("Calories", total_calories)
 st.metric("Protein", total_protein)
 st.metric("Carbs", total_carbs)
 st.metric("Fat", total_fat)
 
-st.write(st.session_state["entries"])
+st.write(entries)

@@ -1,0 +1,107 @@
+"""SQLite persistence for nutrition log entries."""
+
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+
+
+DEFAULT_DB_PATH = "entries.db"
+ENTRY_COLUMNS = (
+    "date",
+    "food",
+    "calories",
+    "protein",
+    "carbs",
+    "fat",
+    "usda_id",
+    "usda_description",
+    "grams",
+)
+
+_db_path = DEFAULT_DB_PATH
+_memory_connection = None
+
+
+def init_db(path=DEFAULT_DB_PATH):
+    """Select a database and create the entries table when needed."""
+    global _db_path, _memory_connection
+
+    if _memory_connection is not None:
+        _memory_connection.close()
+        _memory_connection = None
+
+    _db_path = str(path)
+    if _db_path == ":memory:":
+        _memory_connection = sqlite3.connect(":memory:")
+
+    with _connect() as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                food TEXT NOT NULL,
+                calories REAL NOT NULL,
+                protein REAL NOT NULL,
+                carbs REAL NOT NULL,
+                fat REAL NOT NULL,
+                usda_id INTEGER,
+                usda_description TEXT,
+                grams REAL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entries_date ON entries (date)"
+        )
+
+
+@contextmanager
+def _connect():
+    if _db_path == ":memory:":
+        if _memory_connection is None:
+            raise RuntimeError("Call init_db() before using the database.")
+        yield _memory_connection
+        _memory_connection.commit()
+        return
+
+    connection = sqlite3.connect(Path(_db_path))
+    try:
+        yield connection
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def save_entry(entry):
+    """Insert one entry into the selected database."""
+    values = tuple(entry.get(column) for column in ENTRY_COLUMNS)
+    with _connect() as connection:
+        connection.execute(
+            f"""
+            INSERT INTO entries ({", ".join(ENTRY_COLUMNS)})
+            VALUES ({", ".join("?" for _ in ENTRY_COLUMNS)})
+            """,
+            values,
+        )
+
+
+def load_entries():
+    """Return all entries using the dictionary shape expected by project.py."""
+    return _fetch_entries()
+
+
+def entries_for(date):
+    """Return entries logged on one ISO-formatted date."""
+    return _fetch_entries("WHERE date = ?", (date,))
+
+
+def _fetch_entries(where_clause="", parameters=()):
+    columns = ", ".join(ENTRY_COLUMNS)
+    with _connect() as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            f"SELECT {columns} FROM entries {where_clause} ORDER BY id",
+            parameters,
+        ).fetchall()
+    return [dict(row) for row in rows]

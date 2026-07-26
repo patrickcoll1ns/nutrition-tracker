@@ -3,6 +3,7 @@ from datetime import date
 from dotenv import load_dotenv
 import anthropic
 import requests
+import db
 
 # Sane upper bounds so a joke/adversarial description ("a hundred thousand
 # grapes") can't blow up memory or rack up API calls on a shared demo.
@@ -19,7 +20,7 @@ class MealLookupError(Exception):
 
 
 def main():
-    entries = load("entries.json")
+    db.init_db()
     todays_date = date.today().isoformat()
     while True:
         try:
@@ -33,8 +34,7 @@ def main():
                                     protein=item["protein"], carbs=item["carbs"], fat=item["fat"],
                                     usda_id=item["usda_id"], usda_description=item["usda_description"],
                                     grams=item["grams"])
-                entries.append(entry)
-            save("entries.json", entries)
+                db.save_entry(entry)
             if unmatched:
                 print(f"Couldn't find a USDA match for: {', '.join(unmatched)} — not logged.")
         except EOFError:
@@ -44,10 +44,11 @@ def main():
             print(f"\n{e}\n")
         except Exception:
             print("\nSomething went wrong parsing that meal. Please try again.\n")
-    print(f"Calories: {total(entries_for(entries, todays_date), 'calories')}")
-    print(f"Protein: {total(entries_for(entries, todays_date), 'protein')}")
-    print(f"Carbs: {total(entries_for(entries, todays_date), 'carbs')}")
-    print(f"Fat: {total(entries_for(entries, todays_date), 'fat')}")
+    todays_entries = db.entries_for(todays_date)
+    print(f"Calories: {total(todays_entries, 'calories')}")
+    print(f"Protein: {total(todays_entries, 'protein')}")
+    print(f"Carbs: {total(todays_entries, 'carbs')}")
+    print(f"Fat: {total(todays_entries, 'fat')}")
 
 def total(entries, macro):
     total_macro = 0
@@ -62,17 +63,6 @@ def make_entry(date, food, *, calories, protein, carbs, fat, usda_id, usda_descr
     return {"date": date, "food": food, "calories": calories, "protein": protein,
             "carbs": carbs, "fat": fat, "usda_id": usda_id,
             "usda_description": usda_description, "grams": grams}
-
-def load(path):
-    try:
-        with open(path) as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
-    
-def save(path, data):
-    with open(path, "w") as file:
-        json.dump(data, file)
 
 def entries_for(entries, date):
     date_list = []

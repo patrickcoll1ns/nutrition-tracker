@@ -13,5 +13,6 @@ __pycache__/
 
 # Local data
 entries.json
+entries.db
 
-.env 
+.env
