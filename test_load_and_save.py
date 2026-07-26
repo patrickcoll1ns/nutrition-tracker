@@ -31,3 +31,36 @@ def test_entries_for_filters_in_sql():
     db.save_entry(other_day)
 
     assert db.entries_for("7/11/2026") == [entry]
+
+
+def test_entries_with_ids_returns_saved_row_id():
+    db.init_db(":memory:")
+    entry_id = db.save_entry(entry)
+
+    assert db.entries_with_ids_for("7/11/2026") == [
+        {"id": entry_id, **entry}
+    ]
+
+
+def test_update_entry():
+    db.init_db(":memory:")
+    entry_id = db.save_entry(entry)
+    updated = {
+        **entry,
+        "date": "7/12/2026",
+        "food": "grilled chicken",
+        "calories": 210,
+    }
+
+    assert db.update_entry(entry_id, updated) is True
+    assert db.load_entries() == [updated]
+    assert db.update_entry(999, updated) is False
+
+
+def test_delete_entry():
+    db.init_db(":memory:")
+    entry_id = db.save_entry(entry)
+
+    assert db.delete_entry(entry_id) is True
+    assert db.load_entries() == []
+    assert db.delete_entry(entry_id) is False

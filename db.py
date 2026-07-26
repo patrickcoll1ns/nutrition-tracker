@@ -74,16 +74,39 @@ def _connect():
 
 
 def save_entry(entry):
-    """Insert one entry into the selected database."""
+    """Insert one entry and return its database ID."""
     values = tuple(entry.get(column) for column in ENTRY_COLUMNS)
     with _connect() as connection:
-        connection.execute(
+        cursor = connection.execute(
             f"""
             INSERT INTO entries ({", ".join(ENTRY_COLUMNS)})
             VALUES ({", ".join("?" for _ in ENTRY_COLUMNS)})
             """,
             values,
         )
+        return cursor.lastrowid
+
+
+def update_entry(entry_id, entry):
+    """Replace an entry's editable values. Return whether a row was updated."""
+    values = tuple(entry.get(column) for column in ENTRY_COLUMNS)
+    assignments = ", ".join(f"{column} = ?" for column in ENTRY_COLUMNS)
+    with _connect() as connection:
+        cursor = connection.execute(
+            f"UPDATE entries SET {assignments} WHERE id = ?",
+            (*values, entry_id),
+        )
+        return cursor.rowcount == 1
+
+
+def delete_entry(entry_id):
+    """Delete one entry by ID. Return whether a row was deleted."""
+    with _connect() as connection:
+        cursor = connection.execute(
+            "DELETE FROM entries WHERE id = ?",
+            (entry_id,),
+        )
+        return cursor.rowcount == 1
 
 
 def load_entries():
@@ -96,8 +119,13 @@ def entries_for(date):
     return _fetch_entries("WHERE date = ?", (date,))
 
 
-def _fetch_entries(where_clause="", parameters=()):
-    columns = ", ".join(ENTRY_COLUMNS)
+def entries_with_ids_for(date):
+    """Return entries for history management, including stable row IDs."""
+    return _fetch_entries("WHERE date = ?", (date,), include_id=True)
+
+
+def _fetch_entries(where_clause="", parameters=(), include_id=False):
+    columns = ", ".join((("id",) if include_id else ()) + ENTRY_COLUMNS)
     with _connect() as connection:
         connection.row_factory = sqlite3.Row
         rows = connection.execute(

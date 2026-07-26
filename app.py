@@ -1,5 +1,6 @@
 import os
 import traceback
+from datetime import date as calendar_date
 import streamlit as st
 from project import total, make_entry, parse_meal, MealLookupError
 import db
@@ -15,6 +16,9 @@ except Exception:
 st.title("Nutrition Tracker")
 
 db.init_db()
+
+if "entry_message" in st.session_state:
+    st.success(st.session_state.pop("entry_message"))
 
 # Shared by both logging paths, so it has to live above both of them.
 date = st.date_input("Date").isoformat()
@@ -73,15 +77,95 @@ if submitted:
                             usda_id=None, usda_description=None, grams=None)
         db.save_entry(entry)
 
-entries = db.entries_for(date)
+entries = db.entries_with_ids_for(date)
 total_calories = total(entries, "calories")
 total_protein = total(entries, "protein")
 total_carbs = total(entries, "carbs")
 total_fat = total(entries, "fat")
 
-st.metric("Calories", total_calories)
-st.metric("Protein", total_protein)
-st.metric("Carbs", total_carbs)
-st.metric("Fat", total_fat)
+metric_columns = st.columns(4)
+metric_columns[0].metric("Calories", total_calories)
+metric_columns[1].metric("Protein", total_protein)
+metric_columns[2].metric("Carbs", total_carbs)
+metric_columns[3].metric("Fat", total_fat)
 
-st.write(entries)
+st.subheader("Entries for selected date")
+
+if not entries:
+    st.info("No entries logged for this date.")
+
+for entry in entries:
+    entry_id = entry["id"]
+    label = f'{entry["food"]} — {entry["calories"]:g} calories'
+    with st.expander(label):
+        with st.form(f"edit_entry_{entry_id}"):
+            edited_date = st.date_input(
+                "Date",
+                value=calendar_date.fromisoformat(entry["date"]),
+                key=f"edit_date_{entry_id}",
+            )
+            edited_food = st.text_input(
+                "Food",
+                value=entry["food"],
+                key=f"edit_food_{entry_id}",
+            )
+            edited_calories = st.number_input(
+                "Calories",
+                min_value=0.0,
+                value=float(entry["calories"]),
+                step=1.0,
+                key=f"edit_calories_{entry_id}",
+            )
+            edited_protein = st.number_input(
+                "Protein",
+                min_value=0.0,
+                value=float(entry["protein"]),
+                step=0.1,
+                key=f"edit_protein_{entry_id}",
+            )
+            edited_carbs = st.number_input(
+                "Carbs",
+                min_value=0.0,
+                value=float(entry["carbs"]),
+                step=0.1,
+                key=f"edit_carbs_{entry_id}",
+            )
+            edited_fat = st.number_input(
+                "Fat",
+                min_value=0.0,
+                value=float(entry["fat"]),
+                step=0.1,
+                key=f"edit_fat_{entry_id}",
+            )
+            save_changes = st.form_submit_button("Save changes")
+
+        if save_changes:
+            if not edited_food.strip():
+                st.error("The food name cannot be empty.")
+            else:
+                updated_entry = {
+                    **entry,
+                    "date": edited_date.isoformat(),
+                    "food": edited_food.strip(),
+                    "calories": edited_calories,
+                    "protein": edited_protein,
+                    "carbs": edited_carbs,
+                    "fat": edited_fat,
+                }
+                db.update_entry(entry_id, updated_entry)
+                st.session_state["entry_message"] = "Entry updated."
+                st.rerun()
+
+        confirm_delete = st.checkbox(
+            "I understand this permanently deletes the entry",
+            key=f"confirm_delete_{entry_id}",
+        )
+        if st.button(
+            "Delete entry",
+            key=f"delete_entry_{entry_id}",
+            disabled=not confirm_delete,
+            type="secondary",
+        ):
+            db.delete_entry(entry_id)
+            st.session_state["entry_message"] = "Entry deleted."
+            st.rerun()

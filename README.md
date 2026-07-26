@@ -8,6 +8,9 @@ https://patrick-nutrition-tracker.streamlit.app/
 
 Describe a meal in plain English and watch the macro totals update live. Entries are stored in SQLite so they remain available across browser sessions.
 
+Select a date to review its entries. Each entry can be expanded to correct its
+date, name, or macro values, or permanently deleted after confirmation.
+
 ## What it does
 
 `parse_meal()` in `project.py` is the shared pipeline behind both frontends:
@@ -89,4 +92,4 @@ Tests cover SQLite persistence and date filtering as well as the pure functions 
 ## Roadmap
 
 - **Persistent accounts** — SQLite supports the current single-user app; a multi-user deployment still needs authentication and a hosted database.
-- **History management and trends** — add edit/delete controls and charts backed by the stored row IDs and indexed dates.
+- **Trend analysis** — add daily and weekly charts backed by the indexed log dates.
