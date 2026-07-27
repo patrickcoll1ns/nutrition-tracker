@@ -10,8 +10,8 @@ Describe a meal in plain English and watch the macro totals update live. Entries
 
 Select a date to review its entries. Each entry can be expanded to correct its
 date, meal category, name, or macro values, or permanently deleted after
-confirmation. New entries can be categorized as Breakfast, Lunch, Dinner, or
-Snack.
+clicking its delete button. New entries can be categorized as Breakfast, Lunch,
+Dinner, or Snack.
 
 ## What it does
 

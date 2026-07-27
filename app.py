@@ -174,14 +174,9 @@ for entry in entries:
                 st.session_state["entry_message"] = "Entry updated."
                 st.rerun()
 
-        confirm_delete = st.checkbox(
-            "I understand this permanently deletes the entry",
-            key=f"confirm_delete_{entry_id}",
-        )
         if st.button(
             "Delete entry",
             key=f"delete_entry_{entry_id}",
-            disabled=not confirm_delete,
             type="secondary",
         ):
             db.delete_entry(entry_id)
