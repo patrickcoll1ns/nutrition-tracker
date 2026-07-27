@@ -9,7 +9,9 @@ https://patrick-nutrition-tracker.streamlit.app/
 Describe a meal in plain English and watch the macro totals update live. Entries are stored in SQLite so they remain available across browser sessions.
 
 Select a date to review its entries. Each entry can be expanded to correct its
-date, name, or macro values, or permanently deleted after confirmation.
+date, meal category, name, or macro values, or permanently deleted after
+confirmation. New entries can be categorized as Breakfast, Lunch, Dinner, or
+Snack.
 
 ## What it does
 

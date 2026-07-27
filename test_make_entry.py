@@ -31,3 +31,20 @@ def test_manual_entry_has_no_grams():
     )
 
     assert entry["grams"] is None
+
+
+def test_entry_records_meal_type():
+    entry = make_entry(
+        "2026-07-25",
+        "banana",
+        meal_type="Breakfast",
+        calories=105,
+        protein=1.3,
+        carbs=27,
+        fat=0.4,
+        usda_id=123,
+        usda_description="Bananas, raw",
+        grams=118,
+    )
+
+    assert entry["meal_type"] == "Breakfast"

@@ -1,6 +1,9 @@
+import sqlite3
+
 import db
 
 entry = {"date": "7/11/2026",
+         "meal_type": "Dinner",
          "food": "chicken",
          "calories": 190,
          "protein": 30.0,
@@ -64,3 +67,39 @@ def test_delete_entry():
     assert db.delete_entry(entry_id) is True
     assert db.load_entries() == []
     assert db.delete_entry(entry_id) is False
+
+
+def test_existing_database_gets_meal_type_column(tmp_path):
+    database_path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(database_path)
+    connection.execute(
+        """
+        CREATE TABLE entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            food TEXT NOT NULL,
+            calories REAL NOT NULL,
+            protein REAL NOT NULL,
+            carbs REAL NOT NULL,
+            fat REAL NOT NULL,
+            usda_id INTEGER,
+            usda_description TEXT,
+            grams REAL
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO entries (
+            date, food, calories, protein, carbs, fat,
+            usda_id, usda_description, grams
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("2026-07-25", "egg", 78, 6.3, 0.6, 5.3, None, None, None),
+    )
+    connection.commit()
+    connection.close()
+
+    db.init_db(database_path)
+
+    assert db.load_entries()[0]["meal_type"] == "Uncategorized"

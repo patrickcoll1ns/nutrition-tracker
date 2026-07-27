@@ -8,6 +8,7 @@ from pathlib import Path
 DEFAULT_DB_PATH = "entries.db"
 ENTRY_COLUMNS = (
     "date",
+    "meal_type",
     "food",
     "calories",
     "protein",
@@ -40,6 +41,7 @@ def init_db(path=DEFAULT_DB_PATH):
             CREATE TABLE IF NOT EXISTS entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
+                meal_type TEXT NOT NULL DEFAULT 'Uncategorized',
                 food TEXT NOT NULL,
                 calories REAL NOT NULL,
                 protein REAL NOT NULL,
@@ -51,6 +53,16 @@ def init_db(path=DEFAULT_DB_PATH):
             )
             """
         )
+        existing_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(entries)")
+        }
+        if "meal_type" not in existing_columns:
+            connection.execute(
+                """
+                ALTER TABLE entries
+                ADD COLUMN meal_type TEXT NOT NULL DEFAULT 'Uncategorized'
+                """
+            )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_entries_date ON entries (date)"
         )
@@ -75,7 +87,7 @@ def _connect():
 
 def save_entry(entry):
     """Insert one entry and return its database ID."""
-    values = tuple(entry.get(column) for column in ENTRY_COLUMNS)
+    values = _entry_values(entry)
     with _connect() as connection:
         cursor = connection.execute(
             f"""
@@ -89,7 +101,7 @@ def save_entry(entry):
 
 def update_entry(entry_id, entry):
     """Replace an entry's editable values. Return whether a row was updated."""
-    values = tuple(entry.get(column) for column in ENTRY_COLUMNS)
+    values = _entry_values(entry)
     assignments = ", ".join(f"{column} = ?" for column in ENTRY_COLUMNS)
     with _connect() as connection:
         cursor = connection.execute(
@@ -107,6 +119,15 @@ def delete_entry(entry_id):
             (entry_id,),
         )
         return cursor.rowcount == 1
+
+
+def _entry_values(entry):
+    return tuple(
+        entry.get(column, "Uncategorized")
+        if column == "meal_type"
+        else entry.get(column)
+        for column in ENTRY_COLUMNS
+    )
 
 
 def load_entries():

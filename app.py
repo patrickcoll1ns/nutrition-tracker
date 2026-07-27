@@ -2,7 +2,7 @@ import os
 import traceback
 from datetime import date as calendar_date
 import streamlit as st
-from project import total, make_entry, parse_meal, MealLookupError
+from project import total, make_entry, parse_meal, MealLookupError, MEAL_TYPES
 import db
 
 # Bridge Streamlit Cloud's secrets into the environment so project.py
@@ -22,6 +22,7 @@ if "entry_message" in st.session_state:
 
 # Shared by both logging paths, so it has to live above both of them.
 date = st.date_input("Date").isoformat()
+meal_type = st.selectbox("Meal category", MEAL_TYPES)
 
 st.subheader("Describe your meal")
 description = st.text_input("What did you eat? ", max_chars=300)
@@ -50,7 +51,8 @@ if st.button("Parse & log"):
             st.warning("I could not find any food in that description.")
         else:
             for item in parsed:
-                entry = make_entry(date, item["food"], calories=item["calories"], protein=item["protein"],
+                entry = make_entry(date, item["food"], meal_type=meal_type,
+                                    calories=item["calories"], protein=item["protein"],
                                     carbs=item["carbs"], fat=item["fat"], usda_id=item["usda_id"],
                                     usda_description=item["usda_description"], grams=item["grams"])
                 db.save_entry(entry)
@@ -73,7 +75,8 @@ if submitted:
     if not food.strip():
         st.error("Enter a food name before making an entry.")
     else:
-        entry = make_entry(date, food, calories=calories, protein=protein, carbs=carbs, fat=fat,
+        entry = make_entry(date, food, meal_type=meal_type, calories=calories,
+                            protein=protein, carbs=carbs, fat=fat,
                             usda_id=None, usda_description=None, grams=None)
         db.save_entry(entry)
 
@@ -96,7 +99,10 @@ if not entries:
 
 for entry in entries:
     entry_id = entry["id"]
-    label = f'{entry["food"]} — {entry["calories"]:g} calories'
+    label = (
+        f'{entry["meal_type"]}: {entry["food"]} — '
+        f'{entry["calories"]:g} calories'
+    )
     with st.expander(label):
         with st.form(f"edit_entry_{entry_id}"):
             edited_date = st.date_input(
@@ -108,6 +114,17 @@ for entry in entries:
                 "Food",
                 value=entry["food"],
                 key=f"edit_food_{entry_id}",
+            )
+            current_meal_type = (
+                entry["meal_type"]
+                if entry["meal_type"] in MEAL_TYPES
+                else MEAL_TYPES[0]
+            )
+            edited_meal_type = st.selectbox(
+                "Meal category",
+                MEAL_TYPES,
+                index=MEAL_TYPES.index(current_meal_type),
+                key=f"edit_meal_type_{entry_id}",
             )
             edited_calories = st.number_input(
                 "Calories",
@@ -147,6 +164,7 @@ for entry in entries:
                     **entry,
                     "date": edited_date.isoformat(),
                     "food": edited_food.strip(),
+                    "meal_type": edited_meal_type,
                     "calories": edited_calories,
                     "protein": edited_protein,
                     "carbs": edited_carbs,

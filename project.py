@@ -10,6 +10,7 @@ import db
 MAX_FOODS_PER_MEAL = 20
 MAX_QUANTITY_PER_ITEM = 50
 MAX_GRAMS_PER_ITEM = 5000
+MEAL_TYPES = ("Breakfast", "Lunch", "Dinner", "Snack")
 
 
 class MealLookupError(Exception):
@@ -25,12 +26,19 @@ def main():
     while True:
         try:
             description = input("What did you eat today? Be as specific as possible. ")
+            meal_type = input(
+                "Meal type (Breakfast, Lunch, Dinner, or Snack): "
+            ).strip().title()
+            if meal_type not in MEAL_TYPES:
+                print("Choose Breakfast, Lunch, Dinner, or Snack.")
+                continue
             parsed, unmatched = parse_meal(description)
             if not parsed and not unmatched:
                 print("Could not read that, try describing it differently.")
                 continue
             for item in parsed:
-                entry = make_entry(todays_date, item["food"], calories=item["calories"],
+                entry = make_entry(todays_date, item["food"], meal_type=meal_type,
+                                    calories=item["calories"],
                                     protein=item["protein"], carbs=item["carbs"], fat=item["fat"],
                                     usda_id=item["usda_id"], usda_description=item["usda_description"],
                                     grams=item["grams"])
@@ -56,11 +64,13 @@ def total(entries, macro):
         total_macro += entry[macro]
     return round(total_macro, 2)
 
-def make_entry(date, food, *, calories, protein, carbs, fat, usda_id, usda_description, grams):
+def make_entry(date, food, *, calories, protein, carbs, fat, usda_id,
+               usda_description, grams, meal_type="Uncategorized"):
     # calories/protein/carbs/fat/usda_id/... are keyword-only on purpose:
     # they're mostly same-typed (floats) and easy to transpose (e.g.
     # carbs/fat) if passed positionally.
-    return {"date": date, "food": food, "calories": calories, "protein": protein,
+    return {"date": date, "meal_type": meal_type, "food": food,
+            "calories": calories, "protein": protein,
             "carbs": carbs, "fat": fat, "usda_id": usda_id,
             "usda_description": usda_description, "grams": grams}
 
