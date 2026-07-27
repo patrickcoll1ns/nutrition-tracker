@@ -13,6 +13,9 @@ date, meal category, name, or macro values, or permanently deleted after
 clicking its delete button. New entries can be categorized as Breakfast, Lunch,
 Dinner, or Snack.
 
+Multiple entries from the selected date can also be selected and deleted
+together in one action.
+
 The trends section shows average daily calories and macros across logged days
 in the current tracking period. Users can start a new averaging period without
 deleting their history, and request an on-demand AI summary of the calculated

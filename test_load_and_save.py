@@ -69,6 +69,26 @@ def test_delete_entry():
     assert db.delete_entry(entry_id) is False
 
 
+def test_delete_multiple_entries():
+    db.init_db(":memory:")
+    first_id = db.save_entry(entry)
+    second_id = db.save_entry({**entry, "food": "rice"})
+    remaining_entry = {**entry, "food": "broccoli"}
+    db.save_entry(remaining_entry)
+
+    assert db.delete_entries([first_id, second_id]) == 2
+    assert db.load_entries() == [remaining_entry]
+    assert db.delete_entries([]) == 0
+
+
+def test_delete_multiple_entries_ignores_duplicate_and_missing_ids():
+    db.init_db(":memory:")
+    entry_id = db.save_entry(entry)
+
+    assert db.delete_entries([entry_id, entry_id, 999]) == 1
+    assert db.load_entries() == []
+
+
 def test_existing_database_gets_meal_type_column(tmp_path):
     database_path = tmp_path / "legacy.db"
     connection = sqlite3.connect(database_path)

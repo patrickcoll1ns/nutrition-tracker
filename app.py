@@ -1,5 +1,6 @@
 import os
 import traceback
+from collections import Counter, defaultdict
 from datetime import date as calendar_date
 import streamlit as st
 from project import (
@@ -140,6 +141,47 @@ st.subheader("Entries for selected date")
 
 if not entries:
     st.info("No entries logged for this date.")
+else:
+    entry_names = [
+        (
+            entry["meal_type"],
+            entry["food"],
+            entry["calories"],
+        )
+        for entry in entries
+    ]
+    duplicate_counts = Counter(entry_names)
+    occurrence_counts = defaultdict(int)
+    entry_labels = {}
+    for entry, entry_name in zip(entries, entry_names):
+        occurrence_counts[entry_name] += 1
+        duplicate_label = ""
+        if duplicate_counts[entry_name] > 1:
+            duplicate_label = (
+                f" ({occurrence_counts[entry_name]} of "
+                f"{duplicate_counts[entry_name]})"
+            )
+        entry_labels[entry["id"]] = (
+            f'{entry["meal_type"]}: {entry["food"]}{duplicate_label} — '
+            f'{entry["calories"]:g} calories'
+        )
+    selected_entry_ids = st.multiselect(
+        "Select entries to delete",
+        options=list(entry_labels),
+        format_func=entry_labels.get,
+        placeholder="Choose one or more entries",
+    )
+    if st.button(
+        "Delete selected entries",
+        disabled=not selected_entry_ids,
+        type="secondary",
+    ):
+        deleted_count = db.delete_entries(selected_entry_ids)
+        st.session_state["entry_message"] = (
+            f"Deleted {deleted_count} "
+            f'{"entry" if deleted_count == 1 else "entries"}.'
+        )
+        st.rerun()
 
 for entry in entries:
     entry_id = entry["id"]

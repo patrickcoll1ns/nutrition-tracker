@@ -135,6 +135,21 @@ def delete_entry(entry_id):
         return cursor.rowcount == 1
 
 
+def delete_entries(entry_ids):
+    """Delete several entries in one transaction and return the number removed."""
+    unique_ids = list(dict.fromkeys(entry_ids))
+    if not unique_ids:
+        return 0
+
+    placeholders = ", ".join("?" for _ in unique_ids)
+    with _connect() as connection:
+        cursor = connection.execute(
+            f"DELETE FROM entries WHERE id IN ({placeholders})",
+            unique_ids,
+        )
+        return cursor.rowcount
+
+
 def _entry_values(entry):
     return tuple(
         entry.get(column, "Uncategorized")
