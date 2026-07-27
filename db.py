@@ -66,6 +66,20 @@ def init_db(path=DEFAULT_DB_PATH):
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_entries_date ON entries (date)"
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                average_reset_after_id INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO app_settings (id, average_reset_after_id)
+            VALUES (1, 0)
+            """
+        )
 
 
 @contextmanager
@@ -143,6 +157,71 @@ def entries_for(date):
 def entries_with_ids_for(date):
     """Return entries for history management, including stable row IDs."""
     return _fetch_entries("WHERE date = ?", (date,), include_id=True)
+
+
+def daily_totals_for_current_period():
+    """Return daily totals for entries saved since the last average reset."""
+    with _connect() as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT
+                date,
+                ROUND(SUM(calories), 2) AS calories,
+                ROUND(SUM(protein), 2) AS protein,
+                ROUND(SUM(carbs), 2) AS carbs,
+                ROUND(SUM(fat), 2) AS fat
+            FROM entries
+            WHERE id > (
+                SELECT average_reset_after_id
+                FROM app_settings
+                WHERE id = 1
+            )
+            GROUP BY date
+            ORDER BY date
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def averages_for_current_period():
+    """Return per-logged-day averages since the last reset."""
+    daily_totals = daily_totals_for_current_period()
+    if not daily_totals:
+        return {
+            "days_logged": 0,
+            "calories": 0,
+            "protein": 0,
+            "carbs": 0,
+            "fat": 0,
+        }
+
+    return {
+        "days_logged": len(daily_totals),
+        **{
+            macro: round(
+                sum(day[macro] for day in daily_totals) / len(daily_totals),
+                2,
+            )
+            for macro in ("calories", "protein", "carbs", "fat")
+        },
+    }
+
+
+def reset_averages():
+    """Start a new averaging period without deleting nutrition logs."""
+    with _connect() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE app_settings
+            SET average_reset_after_id = COALESCE(
+                (SELECT MAX(id) FROM entries),
+                0
+            )
+            WHERE id = 1
+            """
+        )
+        return cursor.rowcount == 1
 
 
 def _fetch_entries(where_clause="", parameters=(), include_id=False):

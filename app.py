@@ -2,7 +2,14 @@ import os
 import traceback
 from datetime import date as calendar_date
 import streamlit as st
-from project import total, make_entry, parse_meal, MealLookupError, MEAL_TYPES
+from project import (
+    total,
+    make_entry,
+    parse_meal,
+    analyze_nutrition_trends,
+    MealLookupError,
+    MEAL_TYPES,
+)
 import db
 
 # Bridge Streamlit Cloud's secrets into the environment so project.py
@@ -91,6 +98,43 @@ metric_columns[0].metric("Calories", total_calories)
 metric_columns[1].metric("Protein", total_protein)
 metric_columns[2].metric("Carbs", total_carbs)
 metric_columns[3].metric("Fat", total_fat)
+
+st.subheader("Nutrition trends")
+averages = db.averages_for_current_period()
+st.caption(
+    f'Average across {averages["days_logged"]} logged day(s) since the '
+    "last reset. Days without logs are not included."
+)
+
+average_columns = st.columns(4)
+average_columns[0].metric("Average calories", averages["calories"])
+average_columns[1].metric("Average protein", averages["protein"])
+average_columns[2].metric("Average carbs", averages["carbs"])
+average_columns[3].metric("Average fat", averages["fat"])
+
+trend_action_columns = st.columns(2)
+if trend_action_columns[0].button(
+    "Analyze trends with AI",
+    disabled=averages["days_logged"] == 0,
+):
+    try:
+        with st.spinner("Analyzing your logged trends..."):
+            st.session_state["trend_analysis"] = analyze_nutrition_trends(
+                db.daily_totals_for_current_period()
+            )
+    except MealLookupError as e:
+        st.error(str(e))
+
+if trend_action_columns[1].button("Reset averages"):
+    db.reset_averages()
+    st.session_state.pop("trend_analysis", None)
+    st.session_state["entry_message"] = (
+        "A new averaging period has started. Your food logs were not deleted."
+    )
+    st.rerun()
+
+if "trend_analysis" in st.session_state:
+    st.write(st.session_state["trend_analysis"])
 
 st.subheader("Entries for selected date")
 

@@ -103,3 +103,64 @@ def test_existing_database_gets_meal_type_column(tmp_path):
     db.init_db(database_path)
 
     assert db.load_entries()[0]["meal_type"] == "Uncategorized"
+
+
+def test_daily_totals_and_averages_for_current_period():
+    db.init_db(":memory:")
+    db.save_entry(entry)
+    db.save_entry({**entry, "food": "rice", "calories": 110, "protein": 2})
+    db.save_entry(
+        {
+            **entry,
+            "date": "7/12/2026",
+            "food": "egg",
+            "calories": 100,
+            "protein": 10,
+        }
+    )
+
+    assert db.daily_totals_for_current_period() == [
+        {
+            "date": "7/11/2026",
+            "calories": 300.0,
+            "protein": 32.0,
+            "carbs": 9.0,
+            "fat": 0.6,
+        },
+        {
+            "date": "7/12/2026",
+            "calories": 100.0,
+            "protein": 10.0,
+            "carbs": 4.5,
+            "fat": 0.3,
+        },
+    ]
+    assert db.averages_for_current_period() == {
+        "days_logged": 2,
+        "calories": 200.0,
+        "protein": 21.0,
+        "carbs": 6.75,
+        "fat": 0.45,
+    }
+
+
+def test_reset_averages_keeps_logs_and_starts_new_period():
+    db.init_db(":memory:")
+    db.save_entry(entry)
+
+    assert db.reset_averages() is True
+    assert db.load_entries() == [entry]
+    assert db.averages_for_current_period()["days_logged"] == 0
+
+    new_entry = {**entry, "date": "7/12/2026", "food": "rice"}
+    db.save_entry(new_entry)
+
+    assert db.daily_totals_for_current_period() == [
+        {
+            "date": "7/12/2026",
+            "calories": 190.0,
+            "protein": 30.0,
+            "carbs": 4.5,
+            "fat": 0.3,
+        }
+    ]

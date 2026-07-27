@@ -13,6 +13,11 @@ date, meal category, name, or macro values, or permanently deleted after
 clicking its delete button. New entries can be categorized as Breakfast, Lunch,
 Dinner, or Snack.
 
+The trends section shows average daily calories and macros across logged days
+in the current tracking period. Users can start a new averaging period without
+deleting their history, and request an on-demand AI summary of the calculated
+daily trends.
+
 ## What it does
 
 `parse_meal()` in `project.py` is the shared pipeline behind both frontends:

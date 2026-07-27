@@ -86,6 +86,49 @@ def get_client():
     load_dotenv()
     return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
+
+def analyze_nutrition_trends(daily_totals):
+    """Ask Claude for a concise analysis of pre-calculated daily totals."""
+    if not daily_totals:
+        return "Log at least one day of food before requesting an analysis."
+
+    client = get_client()
+    prompt = f"""You are analyzing a user's nutrition log trends.
+
+The data below contains daily totals calculated by the application. Analyze
+only the supplied data; do not invent meals, goals, diagnoses, or missing
+days.
+
+Daily totals:
+{json.dumps(daily_totals)}
+
+Give a concise, supportive analysis covering:
+- the overall calorie and macronutrient pattern
+- meaningful increases, decreases, or variability over time
+- one or two practical observations the user could consider
+
+Do not provide medical advice. Mention that the averages cover logged days
+only. Use plain language and no more than 180 words."""
+
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=350,
+            messages=[{"role": "user", "content": prompt}],
+            timeout=30,
+        )
+    except anthropic.AnthropicError as e:
+        raise MealLookupError(
+            "Could not reach the trend-analysis model. Please try again."
+        ) from e
+
+    try:
+        return next(block.text for block in response.content if block.type == "text")
+    except StopIteration as e:
+        raise MealLookupError(
+            "The trend-analysis model returned an unexpected response."
+        ) from e
+
 def call_model(text: str):
     client = get_client()
     # usda_query carries prep/cut qualifiers (e.g. "grilled", "skinless") that
