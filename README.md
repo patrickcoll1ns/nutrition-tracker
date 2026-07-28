@@ -1,25 +1,37 @@
-# Nutrition Tracker
+# Nourish — Nutrition Tracker
 
-A Python nutrition tracker that parses free-text meal descriptions ("two eggs and a slice of toast") into calories, protein, carbs, and fat using Claude for extraction and the USDA FoodData Central API for nutrition data. One core module backs two frontends: a command-line tool and a deployed Streamlit web app.
+A responsive Python nutrition tracker that turns free-text meal descriptions
+("two eggs and a slice of toast") into calories, protein, carbs, and fat using
+Claude for extraction and the USDA FoodData Central API for nutrition data. One
+core module backs two frontends: a command-line tool and the Nourish Streamlit
+web app.
 
 ## Demo
 
 https://patrick-nutrition-tracker.streamlit.app/
 
-Describe a meal in plain English and watch the macro totals update live. Entries are stored in SQLite so they remain available across browser sessions.
+Describe a meal in plain English and watch the dashboard update with calorie
+and macro totals. Entries, nutrition goals, and tracking-period settings are
+stored in SQLite so they remain available across browser sessions.
 
-Select a date to review its entries. Each entry can be expanded to correct its
-date, meal category, name, or macro values, or permanently deleted after
-clicking its delete button. New entries can be categorized as Breakfast, Lunch,
-Dinner, or Snack.
+The web interface is organized into four areas:
 
-Multiple entries from the selected date can also be selected and deleted
-together in one action.
+- **Add meal** — analyze a natural-language description or open the manual form
+  to enter known nutrition values.
+- **Dashboard** — review the selected day's meals, totals, and progress toward
+  configurable calorie, protein, carbohydrate, and fat goals.
+- **Insights** — view daily averages, a four-series nutrition trend chart, and
+  an optional AI-generated analysis.
+- **History** — edit or delete entries from the selected date.
 
-The trends section shows average daily calories and macros across logged days
-in the current tracking period. Users can start a new averaging period without
-deleting their history, and request an on-demand AI summary of the calculated
-daily trends.
+Meals can be categorized as Breakfast, Lunch, Dinner, or Snack. Multiple
+entries can be selected and deleted together, and individual entries can be
+expanded to correct their date, category, name, or nutrition values.
+
+Users can choose their own daily goals from the Dashboard. Each progress card
+shows the percentage completed and the amount remaining—or the amount over the
+goal. Saved goals persist in the database and existing databases are
+automatically migrated with sensible defaults.
 
 ## What it does
 
@@ -32,11 +44,19 @@ daily trends.
 
 Foods that can't be matched to anything in USDA are reported back rather than silently dropped, so a partial parse doesn't quietly under-count your totals.
 
-- Auto-stamps each entry with today's date, then repeatedly logs foods you ate.
-- Both frontends save every entry to SQLite as soon as it is logged.
-- Press `Ctrl-D` (EOF) to finish the CLI, at which point it prints **today's** total for each macro.
+- Defaults new entries to today's date while allowing another date to be
+  selected in the web app.
+- Saves every entry to SQLite immediately.
+- Displays daily totals against user-selected calorie and macro goals.
+- Charts calories, protein, carbohydrates, and fat across the current tracking
+  period.
+- Lets users reset the averaging period without deleting their meal history.
+- Prints today's macro totals when the CLI exits with `Ctrl-D` (EOF).
 
 Entries accumulate across days in `entries.db`; daily summaries filter in SQL, so another day's food doesn't inflate the selected day's numbers.
+
+Default daily goals are 2,000 kcal, 100 g protein, 275 g carbohydrates, and
+78 g fat. They are starting values only and can be changed from the Dashboard.
 
 ## Project structure
 
@@ -77,7 +97,8 @@ streamlit run app.py    # web app, opens in your browser
 python project.py       # command-line tool
 ```
 
-Built and deployed on Python 3.13, using `anthropic`, `requests`, `python-dotenv`, and `streamlit` for the web frontend.
+Built and deployed on Python 3.13, using `anthropic`, `requests`,
+`python-dotenv`, `pandas`, and `streamlit`.
 
 ## Design decisions
 
@@ -85,6 +106,17 @@ Built and deployed on Python 3.13, using `anthropic`, `requests`, `python-dotenv
 - **Input validation belongs in `app.py`, not `make_entry()`.** A web form can submit with fields blank in a way the CLI's `input()` never could, so the web app checks for a food name before building an entry. `make_entry()` stays a dumb constructor shared by both frontends rather than inheriting one frontend's input rules.
 - **SQLite with an internal row ID.** Callers still receive the same list-of-dicts shape, while each stored row has a stable ID that can support future edit and delete features. A date index keeps daily and trend queries efficient.
 - **Save after each entry, not once at the end.** Each insert is committed immediately so a crash mid-session doesn't wipe the log.
+- **Goals live beside the data.** Daily calorie and macro goals are stored in
+  `app_settings`, so they survive browser restarts and remain part of the same
+  lightweight SQLite persistence model. `init_db()` adds the goal columns to
+  older databases automatically.
+- **Progress is calculated at render time.** Saved goals remain independent
+  from logged meals; the Dashboard compares the selected day's totals with the
+  current targets and reports percentage complete, remaining values, or
+  overages.
+- **Trends use daily aggregates.** Pandas converts the database's per-day totals
+  into a date-indexed frame for Streamlit's four-series line chart, while an
+  empty state handles periods without logged meals.
 - **One parameterized `total(entries, macro)` function.** Replaced four near-identical functions (one per macro) with a single function that takes the macro name as an argument. Less duplication, easier to extend.
 - **Claude/USDA failures never reach the user as a raw traceback.** Both API-calling functions wrap their exceptions in a single `MealLookupError` with a message that's safe to display — in particular, it never echoes the raw `requests` exception, since that embeds the full request URL (including the USDA API key querystring) in its message.
 - **Sane upper bounds on quantity, portion size, and foods-per-meal.** The Streamlit demo runs on a metered, shared API key; the extraction step is capped so a joke or adversarial description can't multiply into an unbounded number of USDA/Claude calls or an oversized in-memory list.
@@ -95,11 +127,18 @@ Built and deployed on Python 3.13, using `anthropic`, `requests`, `python-dotenv
 pytest
 ```
 
-Tests cover SQLite persistence and date filtering as well as the pure functions in `project.py`: response parsing/validation (including malformed and boundary-value LLM output), USDA response parsing (including malformed/incomplete nutrient data), the heuristic match fallback, macro scaling, and per-day totals.
+Tests cover SQLite persistence, date filtering, configurable nutrition goals,
+legacy-database migration, daily trends, and the pure functions in `project.py`:
+response parsing/validation (including malformed and boundary-value LLM
+output), USDA response parsing (including malformed/incomplete nutrient data),
+the heuristic match fallback, macro scaling, and per-day totals.
 
 `call_model`, `call_usda`, and `parse_meal` — the functions that actually touch the network — are covered by mocking the Claude/USDA calls rather than hitting the real APIs, so failure paths (timeouts, HTTP errors, unmatched foods) are exercised without needing live credentials in CI.
 
 ## Roadmap
 
 - **Persistent accounts** — SQLite supports the current single-user app; a multi-user deployment still needs authentication and a hosted database.
-- **Trend analysis** — add daily and weekly charts backed by the indexed log dates.
+- **Goal guidance** — optionally calculate suggested targets from user-provided
+  preferences while keeping the final goals editable.
+- **Richer insights** — add selectable 7-, 30-, and 90-day chart ranges and
+  macro-specific views.
