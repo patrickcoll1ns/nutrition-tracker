@@ -463,7 +463,7 @@ total_fat = total(entries, "fat")
 nutrition_goals = db.nutrition_goals()
 
 with summary_tab:
-    st.subheader("Today at a glance")
+    st.subheader("Today:")
     st.markdown(
         '<p class="nourish-section-copy">Your totals for the selected date. '
         "Progress bars track the daily goals you choose.</p>",
