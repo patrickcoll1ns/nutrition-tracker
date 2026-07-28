@@ -6,6 +6,12 @@ from pathlib import Path
 
 
 DEFAULT_DB_PATH = "entries.db"
+DEFAULT_NUTRITION_GOALS = {
+    "calories": 2000.0,
+    "protein": 100.0,
+    "carbs": 275.0,
+    "fat": 78.0,
+}
 ENTRY_COLUMNS = (
     "date",
     "meal_type",
@@ -70,14 +76,44 @@ def init_db(path=DEFAULT_DB_PATH):
             """
             CREATE TABLE IF NOT EXISTS app_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                average_reset_after_id INTEGER NOT NULL DEFAULT 0
+                average_reset_after_id INTEGER NOT NULL DEFAULT 0,
+                calorie_goal REAL NOT NULL DEFAULT 2000,
+                protein_goal REAL NOT NULL DEFAULT 100,
+                carb_goal REAL NOT NULL DEFAULT 275,
+                fat_goal REAL NOT NULL DEFAULT 78
             )
             """
         )
+        settings_columns = {
+            row[1] for row in connection.execute(
+                "PRAGMA table_info(app_settings)"
+            )
+        }
+        goal_columns = {
+            "calorie_goal": DEFAULT_NUTRITION_GOALS["calories"],
+            "protein_goal": DEFAULT_NUTRITION_GOALS["protein"],
+            "carb_goal": DEFAULT_NUTRITION_GOALS["carbs"],
+            "fat_goal": DEFAULT_NUTRITION_GOALS["fat"],
+        }
+        for column, default in goal_columns.items():
+            if column not in settings_columns:
+                connection.execute(
+                    f"""
+                    ALTER TABLE app_settings
+                    ADD COLUMN {column} REAL NOT NULL DEFAULT {default:g}
+                    """
+                )
         connection.execute(
             """
-            INSERT OR IGNORE INTO app_settings (id, average_reset_after_id)
-            VALUES (1, 0)
+            INSERT OR IGNORE INTO app_settings (
+                id,
+                average_reset_after_id,
+                calorie_goal,
+                protein_goal,
+                carb_goal,
+                fat_goal
+            )
+            VALUES (1, 0, 2000, 100, 275, 78)
             """
         )
 
@@ -235,6 +271,46 @@ def reset_averages():
             )
             WHERE id = 1
             """
+        )
+        return cursor.rowcount == 1
+
+
+def nutrition_goals():
+    """Return the user's saved daily calorie and macro goals."""
+    with _connect() as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT calorie_goal, protein_goal, carb_goal, fat_goal
+            FROM app_settings
+            WHERE id = 1
+            """
+        ).fetchone()
+    return {
+        "calories": row["calorie_goal"],
+        "protein": row["protein_goal"],
+        "carbs": row["carb_goal"],
+        "fat": row["fat_goal"],
+    }
+
+
+def update_nutrition_goals(goals):
+    """Persist positive daily calorie and macro goals."""
+    values = tuple(float(goals[macro]) for macro in DEFAULT_NUTRITION_GOALS)
+    if any(value <= 0 for value in values):
+        raise ValueError("Nutrition goals must be greater than zero.")
+
+    with _connect() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE app_settings
+            SET calorie_goal = ?,
+                protein_goal = ?,
+                carb_goal = ?,
+                fat_goal = ?
+            WHERE id = 1
+            """,
+            values,
         )
         return cursor.rowcount == 1
 

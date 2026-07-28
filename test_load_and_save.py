@@ -184,3 +184,53 @@ def test_reset_averages_keeps_logs_and_starts_new_period():
             "fat": 0.3,
         }
     ]
+
+
+def test_nutrition_goals_have_defaults_and_can_be_updated():
+    db.init_db(":memory:")
+
+    assert db.nutrition_goals() == db.DEFAULT_NUTRITION_GOALS
+
+    goals = {
+        "calories": 2400,
+        "protein": 150,
+        "carbs": 300,
+        "fat": 85,
+    }
+    assert db.update_nutrition_goals(goals) is True
+    assert db.nutrition_goals() == goals
+
+
+def test_nutrition_goals_must_be_positive():
+    db.init_db(":memory:")
+
+    goals = {**db.DEFAULT_NUTRITION_GOALS, "protein": 0}
+
+    try:
+        db.update_nutrition_goals(goals)
+    except ValueError as error:
+        assert str(error) == "Nutrition goals must be greater than zero."
+    else:
+        raise AssertionError("Expected non-positive goals to be rejected.")
+
+
+def test_existing_settings_table_gets_nutrition_goal_columns(tmp_path):
+    database_path = tmp_path / "legacy-settings.db"
+    connection = sqlite3.connect(database_path)
+    connection.execute(
+        """
+        CREATE TABLE app_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            average_reset_after_id INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    connection.execute(
+        "INSERT INTO app_settings (id, average_reset_after_id) VALUES (1, 0)"
+    )
+    connection.commit()
+    connection.close()
+
+    db.init_db(database_path)
+
+    assert db.nutrition_goals() == db.DEFAULT_NUTRITION_GOALS
