@@ -11,8 +11,10 @@ web app.
 https://patrick-nutrition-tracker.streamlit.app/
 
 Describe a meal in plain English and watch the dashboard update with calorie
-and macro totals. Entries, nutrition goals, and tracking-period settings are
-stored in SQLite so they remain available across browser sessions.
+and macro totals. People sign in with Google, and entries, nutrition goals, and
+tracking-period settings are isolated by account. They are stored in SQLite so
+they remain available across browser sessions while the deployment's local
+storage exists.
 
 The web interface is organized into four areas:
 
@@ -90,6 +92,36 @@ ANTHROPIC_API_KEY=your-key-here
 USDA_API_KEY=your-key-here
 ```
 
+### Configure Google sign-in
+
+Create an OAuth web client in Google Cloud and add these authorized redirect
+URIs:
+
+- `http://localhost:8501/oauth2callback` for local development
+- `https://patrick-nutrition-tracker.streamlit.app/oauth2callback` for the
+  deployed app
+
+For local development, copy the included example (the resulting secrets file
+is gitignored):
+
+```bash
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+```
+
+Then replace the placeholder values in `.streamlit/secrets.toml`:
+
+```toml
+[auth]
+redirect_uri = "http://localhost:8501/oauth2callback"
+cookie_secret = "generate-a-long-random-value"
+client_id = "your-google-client-id"
+client_secret = "your-google-client-secret"
+server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+```
+
+For Streamlit Community Cloud, add the same values in the app's Secrets
+settings, but use the deployed HTTPS redirect URI. Never commit these secrets.
+
 Then either:
 
 ```bash
@@ -103,6 +135,9 @@ Built and deployed on Python 3.13, using `anthropic`, `requests`,
 ## Design decisions
 
 - **One persistence layer for both frontends.** The CLI and Streamlit app read and write through `db.py`, so the database is the source of truth rather than browser session state.
+- **Private account-scoped web logs.** Streamlit's OIDC sign-in supplies a
+  stable Google account identifier. Every web query, insert, update, and delete
+  includes that identifier, including goals and averaging-period settings.
 - **Input validation belongs in `app.py`, not `make_entry()`.** A web form can submit with fields blank in a way the CLI's `input()` never could, so the web app checks for a food name before building an entry. `make_entry()` stays a dumb constructor shared by both frontends rather than inheriting one frontend's input rules.
 - **SQLite with an internal row ID.** Callers still receive the same list-of-dicts shape, while each stored row has a stable ID that can support future edit and delete features. A date index keeps daily and trend queries efficient.
 - **Save after each entry, not once at the end.** Each insert is committed immediately so a crash mid-session doesn't wipe the log.
@@ -137,7 +172,9 @@ the heuristic match fallback, macro scaling, and per-day totals.
 
 ## Roadmap
 
-- **Persistent accounts** — SQLite supports the current single-user app; a multi-user deployment still needs authentication and a hosted database.
+- **Hosted persistence** — move production data from SQLite to a hosted
+  database. Streamlit Community Cloud does not guarantee that files written to
+  its local filesystem will persist indefinitely.
 - **Goal guidance** — optionally calculate suggested targets from user-provided
   preferences while keeping the final goals editable.
 - **Richer insights** — add selectable 7-, 30-, and 90-day chart ranges and

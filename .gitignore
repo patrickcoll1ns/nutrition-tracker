@@ -16,3 +16,4 @@ entries.json
 entries.db
 
 .env
+.streamlit/secrets.toml

@@ -27,6 +27,42 @@ def test_new_database_is_empty():
     assert db.load_entries() == []
 
 
+def test_entries_are_isolated_by_user():
+    db.init_db(":memory:")
+    db.save_entry(entry, "user-a")
+    db.save_entry({**entry, "food": "rice"}, "user-b")
+
+    assert db.load_entries("user-a") == [entry]
+    assert db.load_entries("user-b") == [{**entry, "food": "rice"}]
+    assert db.load_entries("user-c") == []
+
+
+def test_user_cannot_edit_or_delete_another_users_entry():
+    db.init_db(":memory:")
+    entry_id = db.save_entry(entry, "user-a")
+    changed = {**entry, "food": "changed"}
+
+    assert db.update_entry(entry_id, changed, "user-b") is False
+    assert db.delete_entry(entry_id, "user-b") is False
+    assert db.delete_entries([entry_id], "user-b") == 0
+    assert db.load_entries("user-a") == [entry]
+
+
+def test_goals_and_average_resets_are_isolated_by_user():
+    db.init_db(":memory:")
+    db.save_entry(entry, "user-a")
+    db.save_entry(entry, "user-b")
+    user_a_goals = {**db.DEFAULT_NUTRITION_GOALS, "protein": 150}
+
+    db.update_nutrition_goals(user_a_goals, "user-a")
+    db.reset_averages("user-a")
+
+    assert db.nutrition_goals("user-a") == user_a_goals
+    assert db.nutrition_goals("user-b") == db.DEFAULT_NUTRITION_GOALS
+    assert db.averages_for_current_period("user-a")["days_logged"] == 0
+    assert db.averages_for_current_period("user-b")["days_logged"] == 1
+
+
 def test_entries_for_filters_in_sql():
     db.init_db(":memory:")
     db.save_entry(entry)

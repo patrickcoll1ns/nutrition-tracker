@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 DEFAULT_DB_PATH = "entries.db"
+LEGACY_USER_ID = "legacy"
 DEFAULT_NUTRITION_GOALS = {
     "calories": 2000.0,
     "protein": 100.0,
@@ -46,6 +47,7 @@ def init_db(path=DEFAULT_DB_PATH):
             """
             CREATE TABLE IF NOT EXISTS entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL DEFAULT 'legacy',
                 date TEXT NOT NULL,
                 meal_type TEXT NOT NULL DEFAULT 'Uncategorized',
                 food TEXT NOT NULL,
@@ -69,13 +71,38 @@ def init_db(path=DEFAULT_DB_PATH):
                 ADD COLUMN meal_type TEXT NOT NULL DEFAULT 'Uncategorized'
                 """
             )
+        if "user_id" not in existing_columns:
+            connection.execute(
+                """
+                ALTER TABLE entries
+                ADD COLUMN user_id TEXT NOT NULL DEFAULT 'legacy'
+                """
+            )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_entries_date ON entries (date)"
         )
         connection.execute(
             """
+            CREATE INDEX IF NOT EXISTS idx_entries_user_date
+            ON entries (user_id, date)
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS app_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
+                average_reset_after_id INTEGER NOT NULL DEFAULT 0,
+                calorie_goal REAL NOT NULL DEFAULT 2000,
+                protein_goal REAL NOT NULL DEFAULT 100,
+                carb_goal REAL NOT NULL DEFAULT 275,
+                fat_goal REAL NOT NULL DEFAULT 78
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id TEXT PRIMARY KEY,
                 average_reset_after_id INTEGER NOT NULL DEFAULT 0,
                 calorie_goal REAL NOT NULL DEFAULT 2000,
                 protein_goal REAL NOT NULL DEFAULT 100,
@@ -135,43 +162,43 @@ def _connect():
         connection.close()
 
 
-def save_entry(entry):
+def save_entry(entry, user_id=LEGACY_USER_ID):
     """Insert one entry and return its database ID."""
     values = _entry_values(entry)
     with _connect() as connection:
         cursor = connection.execute(
             f"""
-            INSERT INTO entries ({", ".join(ENTRY_COLUMNS)})
-            VALUES ({", ".join("?" for _ in ENTRY_COLUMNS)})
+            INSERT INTO entries (user_id, {", ".join(ENTRY_COLUMNS)})
+            VALUES (?, {", ".join("?" for _ in ENTRY_COLUMNS)})
             """,
-            values,
+            (user_id, *values),
         )
         return cursor.lastrowid
 
 
-def update_entry(entry_id, entry):
+def update_entry(entry_id, entry, user_id=LEGACY_USER_ID):
     """Replace an entry's editable values. Return whether a row was updated."""
     values = _entry_values(entry)
     assignments = ", ".join(f"{column} = ?" for column in ENTRY_COLUMNS)
     with _connect() as connection:
         cursor = connection.execute(
-            f"UPDATE entries SET {assignments} WHERE id = ?",
-            (*values, entry_id),
+            f"UPDATE entries SET {assignments} WHERE id = ? AND user_id = ?",
+            (*values, entry_id, user_id),
         )
         return cursor.rowcount == 1
 
 
-def delete_entry(entry_id):
+def delete_entry(entry_id, user_id=LEGACY_USER_ID):
     """Delete one entry by ID. Return whether a row was deleted."""
     with _connect() as connection:
         cursor = connection.execute(
-            "DELETE FROM entries WHERE id = ?",
-            (entry_id,),
+            "DELETE FROM entries WHERE id = ? AND user_id = ?",
+            (entry_id, user_id),
         )
         return cursor.rowcount == 1
 
 
-def delete_entries(entry_ids):
+def delete_entries(entry_ids, user_id=LEGACY_USER_ID):
     """Delete several entries in one transaction and return the number removed."""
     unique_ids = list(dict.fromkeys(entry_ids))
     if not unique_ids:
@@ -180,8 +207,8 @@ def delete_entries(entry_ids):
     placeholders = ", ".join("?" for _ in unique_ids)
     with _connect() as connection:
         cursor = connection.execute(
-            f"DELETE FROM entries WHERE id IN ({placeholders})",
-            unique_ids,
+            f"DELETE FROM entries WHERE user_id = ? AND id IN ({placeholders})",
+            (user_id, *unique_ids),
         )
         return cursor.rowcount
 
@@ -195,23 +222,28 @@ def _entry_values(entry):
     )
 
 
-def load_entries():
+def load_entries(user_id=LEGACY_USER_ID):
     """Return all entries using the dictionary shape expected by project.py."""
-    return _fetch_entries()
+    return _fetch_entries("WHERE user_id = ?", (user_id,))
 
 
-def entries_for(date):
+def entries_for(date, user_id=LEGACY_USER_ID):
     """Return entries logged on one ISO-formatted date."""
-    return _fetch_entries("WHERE date = ?", (date,))
+    return _fetch_entries(
+        "WHERE user_id = ? AND date = ?", (user_id, date)
+    )
 
 
-def entries_with_ids_for(date):
+def entries_with_ids_for(date, user_id=LEGACY_USER_ID):
     """Return entries for history management, including stable row IDs."""
-    return _fetch_entries("WHERE date = ?", (date,), include_id=True)
+    return _fetch_entries(
+        "WHERE user_id = ? AND date = ?", (user_id, date), include_id=True
+    )
 
 
-def daily_totals_for_current_period():
+def daily_totals_for_current_period(user_id=LEGACY_USER_ID):
     """Return daily totals for entries saved since the last average reset."""
+    _ensure_user_settings(user_id)
     with _connect() as connection:
         connection.row_factory = sqlite3.Row
         rows = connection.execute(
@@ -223,21 +255,24 @@ def daily_totals_for_current_period():
                 ROUND(SUM(carbs), 2) AS carbs,
                 ROUND(SUM(fat), 2) AS fat
             FROM entries
-            WHERE id > (
+            WHERE user_id = ?
+            AND id > (
                 SELECT average_reset_after_id
-                FROM app_settings
-                WHERE id = 1
+                FROM user_settings
+                WHERE user_id = ?
             )
             GROUP BY date
             ORDER BY date
-            """
+            """,
+            (user_id, user_id),
         ).fetchall()
     return [dict(row) for row in rows]
 
 
-def averages_for_current_period():
+def averages_for_current_period(user_id=LEGACY_USER_ID):
     """Return per-logged-day averages since the last reset."""
-    daily_totals = daily_totals_for_current_period()
+    _ensure_user_settings(user_id)
+    daily_totals = daily_totals_for_current_period(user_id)
     if not daily_totals:
         return {
             "days_logged": 0,
@@ -259,32 +294,36 @@ def averages_for_current_period():
     }
 
 
-def reset_averages():
+def reset_averages(user_id=LEGACY_USER_ID):
     """Start a new averaging period without deleting nutrition logs."""
+    _ensure_user_settings(user_id)
     with _connect() as connection:
         cursor = connection.execute(
             """
-            UPDATE app_settings
+            UPDATE user_settings
             SET average_reset_after_id = COALESCE(
-                (SELECT MAX(id) FROM entries),
+                (SELECT MAX(id) FROM entries WHERE user_id = ?),
                 0
             )
-            WHERE id = 1
-            """
+            WHERE user_id = ?
+            """,
+            (user_id, user_id),
         )
         return cursor.rowcount == 1
 
 
-def nutrition_goals():
+def nutrition_goals(user_id=LEGACY_USER_ID):
     """Return the user's saved daily calorie and macro goals."""
+    _ensure_user_settings(user_id)
     with _connect() as connection:
         connection.row_factory = sqlite3.Row
         row = connection.execute(
             """
             SELECT calorie_goal, protein_goal, carb_goal, fat_goal
-            FROM app_settings
-            WHERE id = 1
-            """
+            FROM user_settings
+            WHERE user_id = ?
+            """,
+            (user_id,),
         ).fetchone()
     return {
         "calories": row["calorie_goal"],
@@ -294,23 +333,24 @@ def nutrition_goals():
     }
 
 
-def update_nutrition_goals(goals):
+def update_nutrition_goals(goals, user_id=LEGACY_USER_ID):
     """Persist positive daily calorie and macro goals."""
     values = tuple(float(goals[macro]) for macro in DEFAULT_NUTRITION_GOALS)
     if any(value <= 0 for value in values):
         raise ValueError("Nutrition goals must be greater than zero.")
 
+    _ensure_user_settings(user_id)
     with _connect() as connection:
         cursor = connection.execute(
             """
-            UPDATE app_settings
+            UPDATE user_settings
             SET calorie_goal = ?,
                 protein_goal = ?,
                 carb_goal = ?,
                 fat_goal = ?
-            WHERE id = 1
+            WHERE user_id = ?
             """,
-            values,
+            (*values, user_id),
         )
         return cursor.rowcount == 1
 
@@ -324,3 +364,15 @@ def _fetch_entries(where_clause="", parameters=(), include_id=False):
             parameters,
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def _ensure_user_settings(user_id):
+    """Create an independent settings row the first time a user is seen."""
+    with _connect() as connection:
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO user_settings (user_id)
+            VALUES (?)
+            """,
+            (user_id,),
+        )

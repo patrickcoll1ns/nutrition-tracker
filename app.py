@@ -344,6 +344,42 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+try:
+    is_logged_in = st.user.is_logged_in
+except AttributeError:
+    st.error("Google sign-in is not configured for this copy of Nourish.")
+    st.markdown(
+        """
+        To run locally, create `.streamlit/secrets.toml` and add the Google
+        authentication settings from the README. Then restart the app.
+
+        The local Google OAuth redirect URI must be:
+        `http://localhost:8501/oauth2callback`
+        """
+    )
+    st.stop()
+
+if not is_logged_in:
+    st.info("Sign in to keep your food log private and separate from everyone else’s.")
+    st.button(
+        "Continue with Google",
+        type="primary",
+        on_click=st.login,
+    )
+    st.stop()
+
+user_id = st.user.get("sub")
+if not user_id:
+    st.error("Your sign-in did not include a stable account identifier. Please sign out and try again.")
+    st.button("Sign out", on_click=st.logout)
+    st.stop()
+
+account_columns = st.columns([5, 1])
+account_columns[0].caption(
+    f'Signed in as {st.user.get("name") or st.user.get("email") or "your account"}'
+)
+account_columns[1].button("Sign out", on_click=st.logout)
+
 db.init_db()
 
 if "entry_message" in st.session_state:
@@ -408,7 +444,7 @@ with log_tab:
                         usda_description=item["usda_description"],
                         grams=item["grams"],
                     )
-                    db.save_entry(entry)
+                    db.save_entry(entry, user_id)
                 if parsed:
                     st.success(f"Logged {len(parsed)} item(s).")
                 if unmatched:
@@ -453,14 +489,14 @@ with log_tab:
                 usda_description=None,
                 grams=None,
             )
-            db.save_entry(entry)
+            db.save_entry(entry, user_id)
 
-entries = db.entries_with_ids_for(date)
+entries = db.entries_with_ids_for(date, user_id)
 total_calories = total(entries, "calories")
 total_protein = total(entries, "protein")
 total_carbs = total(entries, "carbs")
 total_fat = total(entries, "fat")
-nutrition_goals = db.nutrition_goals()
+nutrition_goals = db.nutrition_goals(user_id)
 
 with summary_tab:
     st.subheader("Today:")
@@ -513,7 +549,8 @@ with summary_tab:
                     "protein": protein_goal,
                     "carbs": carb_goal,
                     "fat": fat_goal,
-                }
+                },
+                user_id,
             )
             st.session_state["entry_message"] = "Daily goals updated."
             st.rerun()
@@ -576,7 +613,7 @@ with summary_tab:
 
 with trends_tab:
     st.subheader("Nutrition insights")
-    averages = db.averages_for_current_period()
+    averages = db.averages_for_current_period(user_id)
     st.caption(
         f'Average across {averages["days_logged"]} logged day(s) since the '
         "last reset. Days without logs are not included."
@@ -589,7 +626,7 @@ with trends_tab:
     average_columns[3].metric("Fat / day", f'{averages["fat"]} g')
 
     st.markdown("#### Daily trend")
-    daily_totals = db.daily_totals_for_current_period()
+    daily_totals = db.daily_totals_for_current_period(user_id)
     if daily_totals:
         trend_data = pd.DataFrame(daily_totals)
         trend_data["date"] = pd.to_datetime(trend_data["date"])
@@ -616,13 +653,13 @@ with trends_tab:
         try:
             with st.spinner("Analyzing your logged trends..."):
                 st.session_state["trend_analysis"] = analyze_nutrition_trends(
-                    db.daily_totals_for_current_period()
+                    db.daily_totals_for_current_period(user_id)
                 )
         except MealLookupError as e:
             st.error(str(e))
 
     if trend_action_columns[1].button("Reset averages"):
-        db.reset_averages()
+        db.reset_averages(user_id)
         st.session_state.pop("trend_analysis", None)
         st.session_state["entry_message"] = (
             "A new averaging period has started. Your food logs were not deleted."
@@ -681,7 +718,7 @@ with history_tab:
             disabled=not selected_entry_ids,
             type="secondary",
         ):
-            deleted_count = db.delete_entries(selected_entry_ids)
+            deleted_count = db.delete_entries(selected_entry_ids, user_id)
             st.session_state["entry_message"] = (
                 f"Deleted {deleted_count} "
                 f'{"entry" if deleted_count == 1 else "entries"}.'
@@ -761,7 +798,7 @@ with history_tab:
                         "carbs": edited_carbs,
                         "fat": edited_fat,
                     }
-                    db.update_entry(entry_id, updated_entry)
+                    db.update_entry(entry_id, updated_entry, user_id)
                     st.session_state["entry_message"] = "Entry updated."
                     st.rerun()
 
@@ -770,6 +807,6 @@ with history_tab:
                 key=f"delete_entry_{entry_id}",
                 type="secondary",
             ):
-                db.delete_entry(entry_id)
+                db.delete_entry(entry_id, user_id)
                 st.session_state["entry_message"] = "Entry deleted."
                 st.rerun()
