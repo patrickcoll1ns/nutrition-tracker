@@ -16,6 +16,11 @@ tracking-period settings are isolated by account. They are stored in SQLite so
 they remain available across browser sessions while the deployment's local
 storage exists.
 
+Google sign-in is used only to identify the account that owns each nutrition
+record. Nourish does not receive or store Google passwords. A signed-in person
+can only load, edit, or delete records associated with their own Google account
+identifier.
+
 The web interface is organized into four areas:
 
 - **Add meal** — analyze a natural-language description or open the manual form
@@ -64,6 +69,8 @@ Default daily goals are 2,000 kcal, 100 g protein, 275 g carbohydrates, and
 
 ```
 nutrition-tracker/
+├── .streamlit/
+│   └── secrets.toml.example # Safe template for local authentication settings
 ├── app.py                  # Streamlit web frontend
 ├── db.py                   # Shared SQLite persistence layer
 ├── project.py              # CLI frontend + shared core logic (Claude + USDA pipeline)
@@ -94,8 +101,13 @@ USDA_API_KEY=your-key-here
 
 ### Configure Google sign-in
 
-Create an OAuth web client in Google Cloud and add these authorized redirect
-URIs:
+Create a **Web application** OAuth client in Google Cloud. Add both application
+origins under **Authorized JavaScript origins**:
+
+- `http://localhost:8501`
+- `https://patrick-nutrition-tracker.streamlit.app`
+
+Add both callback addresses under **Authorized redirect URIs**:
 
 - `http://localhost:8501/oauth2callback` for local development
 - `https://patrick-nutrition-tracker.streamlit.app/oauth2callback` for the
@@ -119,8 +131,40 @@ client_secret = "your-google-client-secret"
 server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
 ```
 
-For Streamlit Community Cloud, add the same values in the app's Secrets
-settings, but use the deployed HTTPS redirect URI. Never commit these secrets.
+For Streamlit Community Cloud, open **Manage app → Settings → Secrets** and add
+the API keys and production authentication configuration:
+
+```toml
+ANTHROPIC_API_KEY = "your-anthropic-key"
+USDA_API_KEY = "your-usda-key"
+
+[auth]
+redirect_uri = "https://patrick-nutrition-tracker.streamlit.app/oauth2callback"
+cookie_secret = "generate-a-long-random-value"
+client_id = "your-google-client-id.apps.googleusercontent.com"
+client_secret = "your-google-client-secret"
+server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+```
+
+The local and deployed configurations use the same Google client ID and client
+secret, but different `redirect_uri` values. Save the Cloud secrets and reboot
+the app so Streamlit initializes authentication. Never commit
+`.streamlit/secrets.toml`, OAuth credentials, cookie secrets, or API keys.
+
+### Authentication troubleshooting
+
+- **`Error 401: invalid_client` / “OAuth client was not found”** — the deployed
+  `client_id` is missing, still a placeholder, or does not exactly match the
+  Google client. Copy the complete ID that works locally into Streamlit Cloud
+  Secrets; a Google web client ID normally ends in
+  `.apps.googleusercontent.com`.
+- **`redirect_uri_mismatch`** — the callback in Streamlit Secrets does not
+  exactly match an Authorized redirect URI in Google Cloud. Local development
+  uses the HTTP localhost callback; the deployed app uses the HTTPS
+  `streamlit.app` callback shown above.
+- **“Google sign-in is not configured”** — the `[auth]` block is absent,
+  incomplete, or has not been loaded. Correct the Cloud Secrets, save them, and
+  reboot the app.
 
 Then either:
 
@@ -138,13 +182,14 @@ Built and deployed on Python 3.13, using `anthropic`, `requests`,
 - **Private account-scoped web logs.** Streamlit's OIDC sign-in supplies a
   stable Google account identifier. Every web query, insert, update, and delete
   includes that identifier, including goals and averaging-period settings.
+  Existing records from before accounts were added remain assigned to an
+  isolated legacy identity rather than becoming visible to a new user.
 - **Input validation belongs in `app.py`, not `make_entry()`.** A web form can submit with fields blank in a way the CLI's `input()` never could, so the web app checks for a food name before building an entry. `make_entry()` stays a dumb constructor shared by both frontends rather than inheriting one frontend's input rules.
 - **SQLite with an internal row ID.** Callers still receive the same list-of-dicts shape, while each stored row has a stable ID that can support future edit and delete features. A date index keeps daily and trend queries efficient.
 - **Save after each entry, not once at the end.** Each insert is committed immediately so a crash mid-session doesn't wipe the log.
-- **Goals live beside the data.** Daily calorie and macro goals are stored in
-  `app_settings`, so they survive browser restarts and remain part of the same
-  lightweight SQLite persistence model. `init_db()` adds the goal columns to
-  older databases automatically.
+- **Goals live beside each user's data.** Daily calorie and macro goals are
+  stored in `user_settings`, keyed by the same account identifier as meal
+  entries. Each person's targets and averaging reset are independent.
 - **Progress is calculated at render time.** Saved goals remain independent
   from logged meals; the Dashboard compares the selected day's totals with the
   current targets and reports percentage complete, remaining values, or
