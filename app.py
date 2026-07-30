@@ -3,6 +3,7 @@ import traceback
 from collections import Counter, defaultdict
 from datetime import date as calendar_date
 import html
+from urllib.parse import urlsplit
 
 import pandas as pd
 import streamlit as st
@@ -348,15 +349,45 @@ try:
     is_logged_in = st.user.is_logged_in
 except AttributeError:
     st.error("Google sign-in is not configured for this copy of Nourish.")
-    st.markdown(
-        """
-        To run locally, create `.streamlit/secrets.toml` and add the Google
-        authentication settings from the README. Then restart the app.
-
-        The local Google OAuth redirect URI must be:
-        `http://localhost:8501/oauth2callback`
-        """
+    try:
+        auth_settings = st.secrets.get("auth", {})
+    except Exception:
+        auth_settings = {}
+    required_auth_keys = {
+        "redirect_uri",
+        "cookie_secret",
+        "client_id",
+        "client_secret",
+        "server_metadata_url",
+    }
+    missing_auth_keys = sorted(required_auth_keys - set(auth_settings))
+    current_url = st.context.url
+    current_origin = (
+        f"{urlsplit(current_url).scheme}://{urlsplit(current_url).netloc}"
     )
+    expected_redirect_uri = f"{current_origin}/oauth2callback"
+
+    if not auth_settings:
+        st.markdown(
+            "No `[auth]` section was found. Add it in "
+            "**Manage app → Settings → Secrets**, save, and reboot the app."
+        )
+    elif missing_auth_keys:
+        st.markdown(
+            "The `[auth]` section is missing: "
+            + ", ".join(f"`{key}`" for key in missing_auth_keys)
+            + "."
+        )
+    elif auth_settings["redirect_uri"] != expected_redirect_uri:
+        st.markdown(
+            "The configured `redirect_uri` does not match this app. "
+            f"It must be exactly: `{expected_redirect_uri}`"
+        )
+    else:
+        st.markdown(
+            "The authentication values are present, but Streamlit has not "
+            "loaded them yet. Reboot the app from **Manage app**."
+        )
     st.stop()
 
 if not is_logged_in:
