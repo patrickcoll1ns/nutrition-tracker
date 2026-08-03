@@ -1,5 +1,8 @@
 # Nourish — Nutrition Tracker
 
+[![Tests](https://github.com/patrickcoll1ns/nutrition-tracker/actions/workflows/tests.yml/badge.svg)](https://github.com/patrickcoll1ns/nutrition-tracker/actions/workflows/tests.yml)
+[![Live app](https://img.shields.io/badge/demo-Streamlit-5f8f72)](https://patrick-nutrition-tracker.streamlit.app/)
+
 A responsive Python nutrition tracker that turns free-text meal descriptions
 ("two eggs and a slice of toast") into calories, protein, carbs, and fat using
 Claude for extraction and the USDA FoodData Central API for nutrition data. One
@@ -8,7 +11,9 @@ web app.
 
 ## Demo
 
-https://patrick-nutrition-tracker.streamlit.app/
+**[Open the live app](https://patrick-nutrition-tracker.streamlit.app/)**
+
+![Nourish sign-in screen](docs/images/nourish-sign-in.jpg)
 
 Describe a meal in plain English and watch the dashboard update with calorie
 and macro totals. People sign in with Google, and entries, nutrition goals, and
@@ -51,6 +56,25 @@ automatically migrated with sensible defaults.
 
 Foods that can't be matched to anything in USDA are reported back rather than silently dropped, so a partial parse doesn't quietly under-count your totals.
 
+### Architecture
+
+```mermaid
+flowchart LR
+    User["Meal description"] --> UI["Streamlit app or CLI"]
+    UI --> Core["Shared parse_meal pipeline"]
+    Core --> Claude["Claude: extract foods and portions"]
+    Core --> USDA["USDA FoodData Central: nutrition candidates"]
+    USDA --> Rank["Claude re-rank with heuristic fallback"]
+    Claude --> Rank
+    Rank --> Scale["Scale per-100g macros to each portion"]
+    Scale --> DB["SQLite persistence"]
+    DB --> Dashboard["Dashboard, history, and insights"]
+```
+
+External services are isolated in the shared core, persistence is isolated in
+`db.py`, and both interfaces operate on the same entry shape. Network calls are
+mocked in tests, so CI requires neither API credentials nor external access.
+
 - Defaults new entries to today's date while allowing another date to be
   selected in the web app.
 - Saves every entry to SQLite immediately.
@@ -71,12 +95,16 @@ Default daily goals are 2,000 kcal, 100 g protein, 275 g carbohydrates, and
 nutrition-tracker/
 ├── .streamlit/
 │   └── secrets.toml.example # Safe template for local authentication settings
+├── .github/workflows/
+│   └── tests.yml            # Python 3.11/3.13 test matrix
+├── docs/images/             # README screenshots captured from the deployed app
 ├── app.py                  # Streamlit web frontend
 ├── db.py                   # Shared SQLite persistence layer
 ├── project.py              # CLI frontend + shared core logic (Claude + USDA pipeline)
 ├── test_*.py               # One test file per unit under test (see below)
 ├── usda_egg_response.json  # Fixture: a real USDA API response, used by test_parse_usda_response.py
 ├── requirements.txt
+├── requirements-dev.txt
 └── README.md
 ```
 
@@ -204,6 +232,7 @@ Built and deployed on Python 3.13, using `anthropic`, `requests`,
 ## Tests
 
 ```bash
+pip install -r requirements-dev.txt
 pytest
 ```
 
@@ -214,6 +243,10 @@ output), USDA response parsing (including malformed/incomplete nutrient data),
 the heuristic match fallback, macro scaling, and per-day totals.
 
 `call_model`, `call_usda`, and `parse_meal` — the functions that actually touch the network — are covered by mocking the Claude/USDA calls rather than hitting the real APIs, so failure paths (timeouts, HTTP errors, unmatched foods) are exercised without needing live credentials in CI.
+
+GitHub Actions runs all tests on Python 3.11 and 3.13 for every push and pull
+request. The production dependency list intentionally excludes `pytest`;
+development and CI dependencies live in `requirements-dev.txt`.
 
 ## Roadmap
 
